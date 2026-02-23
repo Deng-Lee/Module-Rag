@@ -40,10 +40,12 @@ def _envelope_from_dict(d: dict[str, Any]) -> TraceEnvelope:
 class JsonlReader:
     def __init__(self, path_or_dir: str | Path) -> None:
         p = Path(path_or_dir)
-        if p.is_dir() or str(path_or_dir).endswith(("/", "\\")):
+        if p.suffix == ".jsonl":
+            self.path = p
+        elif p.is_dir() or str(path_or_dir).endswith(("/", "\\")):
             self.path = p / "traces.jsonl"
         else:
-            self.path = p
+            self.path = p / "traces.jsonl"
 
     def iter_traces(self) -> Iterator[TraceEnvelope]:
         if not self.path.exists():
@@ -57,4 +59,3 @@ class JsonlReader:
                 if not isinstance(data, dict):
                     continue
                 yield _envelope_from_dict(data)
-

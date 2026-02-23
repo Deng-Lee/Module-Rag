@@ -5501,7 +5501,7 @@ B) Dashboard（Web）
 | A-3 | TraceContext（上下文） | 完成 | 2026-02-23 | `observability.trace.{context,envelope}`：span 栈、嵌套关系、异常 error 事件、`finish()` 自动闭合 |
 | A-4 | obs API（低侵入打点） | 完成 | 2026-02-23 | `observability.obs.api`：`span/event/metric/set_sink` + sink 事件捕获 |
 | A-5 | JSONL Sink（最小可回溯） | 完成 | 2026-02-23 | `observability.sinks.jsonl`、`observability.readers.jsonl_reader` |
-| A-6 | 最小 Trace 闭环集成样例 | 未完成 |  | `test_trace_smoke`、schema 校验 helper |
+| A-6 | 最小 Trace 闭环集成样例 | 完成 | 2026-02-23 | `trace_envelope.json`、`test_trace_smoke`（JSONL 闭环） |
 
 #### 6.4.2 阶段 B
 

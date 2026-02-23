@@ -1,0 +1,19 @@
+{
+  "title": "TraceEnvelope",
+  "type": "object",
+  "required": ["trace_id", "start_ts", "end_ts", "spans", "events"],
+  "properties": {
+    "trace_id": { "type": "string" },
+    "start_ts": { "type": "number" },
+    "end_ts": { "type": "number" },
+    "spans": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "events": {
+      "type": "array",
+      "items": { "type": "object" }
+    }
+  }
+}
+

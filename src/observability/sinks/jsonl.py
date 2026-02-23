@@ -25,10 +25,13 @@ class JsonlSink:
 
     def __init__(self, path_or_dir: str | Path, rotate_policy: Any | None = None) -> None:
         p = Path(path_or_dir)
-        if p.is_dir() or str(path_or_dir).endswith(("/", "\\")):
+        if p.suffix == ".jsonl":
+            self.path = p
+        elif p.is_dir() or str(path_or_dir).endswith(("/", "\\")):
             self.path = p / "traces.jsonl"
         else:
-            self.path = p
+            # Treat non-existing path without suffix as directory.
+            self.path = p / "traces.jsonl"
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.rotate_policy = rotate_policy
 
@@ -53,4 +56,3 @@ class JsonlSink:
 
     def on_trace_end(self, envelope: TraceEnvelope) -> None:
         self.write(envelope)
-
