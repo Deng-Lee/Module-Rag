@@ -55,6 +55,9 @@ class TraceContext:
             return None
         return self._spans_by_id.get(self._span_stack[-1])
 
+    def current_span(self) -> SpanRecord | None:
+        return self._current_span()
+
     @contextmanager
     def start_span(self, name: str, attrs: dict[str, Any] | None = None) -> Iterator[SpanRecord]:
         span_id = _new_id("span")
@@ -90,13 +93,14 @@ class TraceContext:
                 self._span_stack.pop()
             s.end_ts = _now()
 
-    def add_event(self, kind: str, attrs: dict[str, Any] | None = None) -> None:
+    def add_event(self, kind: str, attrs: dict[str, Any] | None = None) -> EventRecord:
         ev = EventRecord(ts=_now(), kind=kind, attrs=dict(attrs or {}))
         cur = self._current_span()
         if cur is None:
             self._trace_events.append(ev)
         else:
             cur.events.append(ev)
+        return ev
 
     def finish(self) -> TraceEnvelope:
         # Auto-close any leaked spans to keep traces well-formed.
@@ -124,4 +128,3 @@ class TraceContext:
             spans=spans,
             events=list(self._trace_events),
         )
-
