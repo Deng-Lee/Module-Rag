@@ -5497,7 +5497,7 @@ B) Dashboard（Web）
 | 任务编号 | 任务名称 | 状态 | 完成日期 | 备注（关键实现） |
 |---|---|---|---|---|
 | A-1 | 工程骨架落地 | 完成 | 2026-02-23 | `scripts/bootstrap_local.sh`、`core.strategy.load_settings()`、`pyproject.toml` |
-| A-2 | 测试基座与标记 | 未完成 |  | pytest markers、`conftest` fixtures |
+| A-2 | 测试基座与标记 | 完成 | 2026-02-23 | `pytest.ini`、`tests/conftest.py`（markers 默认选择逻辑、`tmp_workdir/mock_clock`、`mocker` 兼容回退） |
 | A-3 | TraceContext（上下文） | 未完成 |  | `TraceContext.new/current/activate/start_span/add_event/finish` |
 | A-4 | obs API（低侵入打点） | 未完成 |  | `span/event/metric/set_sink` |
 | A-5 | JSONL Sink（最小可回溯） | 未完成 |  | `JsonlSink.write`、（可选）`JsonlReader.iter_traces` |
