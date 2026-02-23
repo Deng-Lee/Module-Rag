@@ -1,0 +1,19 @@
+# Single source of truth for local paths and default strategy selection.
+#
+# All paths are interpreted as workspace-relative unless already absolute.
+paths:
+  data_dir: data
+  raw_dir: data/raw
+  md_dir: data/md
+  assets_dir: data/assets
+  chroma_dir: data/chroma
+  sqlite_dir: data/sqlite
+  cache_dir: cache
+  logs_dir: logs
+
+server:
+  dashboard_host: 127.0.0.1
+  dashboard_port: 7860
+
+defaults:
+  strategy_config_id: local.default

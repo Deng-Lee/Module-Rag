@@ -1,0 +1,16 @@
+# Logging configuration placeholder.
+# The implementation will interpret this for JSONL structured logs + console logs.
+version: 1
+
+format:
+  jsonl: true
+  console: true
+
+levels:
+  root: INFO
+
+redaction:
+  enabled: true
+  fields:
+    - api_key
+    - authorization

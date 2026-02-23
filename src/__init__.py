@@ -1,0 +1,2 @@
+"""MODULE-RAG package root."""
+
