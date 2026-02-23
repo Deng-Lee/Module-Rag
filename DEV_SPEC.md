@@ -5500,7 +5500,7 @@ B) Dashboard（Web）
 | A-2 | 测试基座与标记 | 完成 | 2026-02-23 | `pytest.ini`、`tests/conftest.py`（markers 默认选择逻辑、`tmp_workdir/mock_clock`、`mocker` 兼容回退） |
 | A-3 | TraceContext（上下文） | 完成 | 2026-02-23 | `observability.trace.{context,envelope}`：span 栈、嵌套关系、异常 error 事件、`finish()` 自动闭合 |
 | A-4 | obs API（低侵入打点） | 完成 | 2026-02-23 | `observability.obs.api`：`span/event/metric/set_sink` + sink 事件捕获 |
-| A-5 | JSONL Sink（最小可回溯） | 未完成 |  | `JsonlSink.write`、（可选）`JsonlReader.iter_traces` |
+| A-5 | JSONL Sink（最小可回溯） | 完成 | 2026-02-23 | `observability.sinks.jsonl`、`observability.readers.jsonl_reader` |
 | A-6 | 最小 Trace 闭环集成样例 | 未完成 |  | `test_trace_smoke`、schema 校验 helper |
 
 #### 6.4.2 阶段 B
