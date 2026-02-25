@@ -7,6 +7,8 @@ from .chunking.sectioner import SectionerStage
 from .chunking.chunker import ChunkerStage
 from .transform.asset_normalize import FsAssetNormalizer
 from .transform.transform_pre import DefaultTransformPre, TransformPreStage
+from .transform.transform_post import NoopEnricher, TransformPostStage
+from .transform.retrieval_view import RetrievalViewConfig, build_chunk_retrieval_text
 from .storage.fs import FsStore
 from .storage.assets import AssetStore
 from .storage.sqlite import SqliteStore
@@ -26,4 +28,8 @@ __all__ = [
     "FsAssetNormalizer",
     "DefaultTransformPre",
     "TransformPreStage",
+    "RetrievalViewConfig",
+    "build_chunk_retrieval_text",
+    "TransformPostStage",
+    "NoopEnricher",
 ]

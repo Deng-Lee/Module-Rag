@@ -4370,7 +4370,7 @@ B) Dashboard（Web）
 
 目的：把“事实层 chunk_text + 可选增强片段（metadata/OCR/Caption）”组装成用于编码/召回的检索视图；默认增强可用 noop 占位，保证闭环不空转。
 
-修改/新增文件（可见变化）：`src/ingestion/stages/transform/transform_post.py`、`src/ingestion/stages/transform/retrieval_view.py`、（可选）`metadata_enricher.py`、`image_captioner.py`。
+修改/新增文件（可见变化）：`src/ingestion/stages/transform/transform_post.py`、`src/ingestion/stages/transform/retrieval_view.py`、`tests/unit/test_transform_post.py`。
 
 实现函数（最小集合）：
 
@@ -5701,7 +5701,7 @@ B) Dashboard（Web）
 | C-5 | 资产归一化：ref_id→asset_id + 去重 + 落盘 | 完成 | 2026-02-25 | `AssetNormalizer.normalize`、`AssetStore.write_bytes` |
 | C-6 | Transform Pre：md_norm + 图片引用重写 | 完成 | 2026-02-25 | `BaseTransform.apply`、`rewrite_image_links` |
 | C-7 | Chunking：Sectioner + Chunker（保留 asset_ids） | 完成 | 2026-02-25 | `section()`、`chunk()`、`assign_chunk_ids`、`assign_section_ids` |
-| C-8 | Transform Post：检索视图 chunk_retrieval_text | 未完成 |  | `build_chunk_retrieval_text`（模板化） |
+| C-8 | Transform Post：检索视图 chunk_retrieval_text | 完成 | 2026-02-25 | `build_chunk_retrieval_text`（模板化） |
 | C-9 | Encoding：dense fake + sparse MVP | 未完成 |  | dense vectors + `{chunk_id,text}` 视图 |
 | C-10 | Embedding Cache：向量复用 | 未完成 |  | `EmbeddingCache.get/put`、cache key 对齐 canonical |
 | C-11 | Upsert：FS + SQLite + Chroma + FTS5 | 未完成 |  | `ChromaStore.upsert`、`Fts5Store.upsert`、一致性 |
