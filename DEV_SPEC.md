@@ -4142,7 +4142,7 @@ B) Dashboard（Web）
 
 目的：补齐一组“无需外部依赖也能跑”的默认 provider，实现端到端闭环的最小运行能力；真实后端放到后续集成测试再启用。
 
-修改/新增文件（可见变化）：`src/libs/providers/embedding/fake_embedder.py`、`src/libs/providers/llm/fake_llm.py`、`src/libs/providers/vector_store/in_memory.py`（或同类）、`src/libs/providers/reranker/noop.py`、`tests/mocks/*`。
+修改/新增文件（可见变化）：`src/libs/providers/bootstrap.py`、`src/libs/providers/embedding/fake_embedder.py`、`src/libs/providers/llm/fake_llm.py`、`src/libs/providers/vector_store/in_memory.py`、`src/libs/providers/reranker/noop.py`、`tests/unit/test_builtin_providers.py`。
 
 实现函数（最小集合）：
 
@@ -4150,17 +4150,20 @@ B) Dashboard（Web）
 * `FakeLLM.generate(mode, ...)`（可返回模板化回答/回显）
 * `InMemoryVectorIndex.upsert(items)` / `InMemoryVectorIndex.query(vec, top_k)`
 * `NoopReranker.rerank(query, candidates) -> candidates`
+* `register_builtin_providers(registry)`（注册默认 provider）
 
 验收标准：
 
 * 在不配置任何外部 API key 的情况下，使用 fake/noop provider 也能完成“装配 → 调用 → 返回结果”的链路；
 * Fake 实现可 deterministic，便于单测与 golden 回归。
+* 默认 provider 可通过 `register_builtin_providers(...)` 一次性注册到 `ProviderRegistry`。
 
 测试方法：
 
 * 单测：FakeEmbedder 同输入同输出、不同输入输出不同；
 * 单测：InMemoryVectorIndex upsert/query 的 TopK 行为；
 * 单测：NoopReranker 不改变排序且不抛异常。
+* 单测：`register_builtin_providers` 可注册并创建实例。
 
 5. **B-5 Strategy 展开到工厂输入（最小贯通）**
 
@@ -5681,7 +5684,7 @@ B) Dashboard（Web）
 | B-1 | ProviderRegistry（注册与实例化） | 完成 | 2026-02-25 | `register/get/create/has`、缺失 provider 异常 |
 | B-2 | 工厂层 Factories（装配 graph） | 完成 | 2026-02-25 | `make_*` 系列装配、可选模块 `noop` |
 | B-3 | 接口契约 Interfaces（按能力域） | 完成 | 2026-02-25 | `BaseLoader/Sectioner/Chunker/Embedder/Retriever/...` |
-| B-4 | 默认可运行实现（Fake/Noop） | 未完成 |  | `FakeEmbedder/FakeLLM/InMemoryVectorIndex/NoopReranker` |
+| B-4 | 默认可运行实现（Fake/Noop） | 完成 | 2026-02-25 | `FakeEmbedder/FakeLLM/InMemoryVectorIndex/NoopReranker` + `register_builtin_providers` |
 | B-5 | Strategy 展开到工厂输入 | 未完成 |  | `StrategyLoader.load`、`resolve_provider` |
 | B-6 | Provider Swap 回归样例（A/B） | 未完成 |  | `build_runtime_from_strategy()` + trace 归因字段 |
 
