@@ -5644,7 +5644,7 @@ B) Dashboard（Web）
 |---|---|---|---|---|
 | B-1 | ProviderRegistry（注册与实例化） | 完成 | 2026-02-25 | `register/get/create/has`、缺失 provider 异常 |
 | B-2 | 工厂层 Factories（装配 graph） | 完成 | 2026-02-25 | `make_*` 系列装配、可选模块 `noop` |
-| B-3 | 接口契约 Interfaces（按能力域） | 未完成 |  | `BaseLoader/Sectioner/Chunker/Embedder/Retriever/...` |
+| B-3 | 接口契约 Interfaces（按能力域） | 完成 | 2026-02-25 | `BaseLoader/Sectioner/Chunker/Embedder/Retriever/...` |
 | B-4 | 默认可运行实现（Fake/Noop） | 未完成 |  | `FakeEmbedder/FakeLLM/InMemoryVectorIndex/NoopReranker` |
 | B-5 | Strategy 展开到工厂输入 | 未完成 |  | `StrategyLoader.load`、`resolve_provider` |
 | B-6 | Provider Swap 回归样例（A/B） | 未完成 |  | `build_runtime_from_strategy()` + trace 归因字段 |
