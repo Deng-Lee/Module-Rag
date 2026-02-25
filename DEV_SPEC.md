@@ -4281,7 +4281,7 @@ B) Dashboard（Web）
 
 目的：对齐系统第一期“支持 pdf+md”的承诺，提供可 ingest 的 PDF 最小实现：把 PDF 文本转换为 md（允许格式较粗糙），并输出图片引用清单（ref_id/anchor），让后续资产归一化与多模态链路可跑通。
 
-修改/新增文件（可见变化）：`src/libs/providers/loader/pdf_loader.py`、`src/libs/interfaces/loader/loader.py`（如需补齐接口细节）、`tests/fixtures/pdf/*`（最小 PDF 样本）。
+修改/新增文件（可见变化）：`src/libs/providers/loader/pdf_loader.py`、`tests/unit/test_pdf_loader.py`。
 
 实现函数（最小集合）：
 
@@ -5695,7 +5695,7 @@ B) Dashboard（Web）
 | C-1 | IngestionPipeline 骨架 + 进度回调 + trace spans | 完成 | 2026-02-25 | `IngestionPipeline.run`、`run_stage`、`on_progress` |
 | C-2 | Dedup：写盘+sha256+SQLite 决策 | 完成 | 2026-02-25 | `compute_sha256_stream`、`find_version_by_file_hash` |
 | C-3 | Loader Stage：先跑通 Markdown | 完成 | 2026-02-25 | `detect_file_type`、`LoaderStage.run`、`MarkdownLoader.load` |
-| C-4 | PDFLoader MVP：PDF→md + 图片 ref_id 清单 | 未完成 |  | `PdfLoader.load`、图片 manifest/ref_id 稳定 |
+| C-4 | PDFLoader MVP：PDF→md + 图片 ref_id 清单 | 完成 | 2026-02-25 | `PdfLoader.load`、图片 manifest/ref_id 稳定 |
 | C-5 | 资产归一化：ref_id→asset_id + 去重 + 落盘 | 未完成 |  | `AssetNormalizer.normalize`、`FsStore.write_asset` |
 | C-6 | Transform Pre：md_norm + 图片引用重写 | 未完成 |  | `BaseTransform.apply`、`rewrite_image_links` |
 | C-7 | Chunking：Sectioner + Chunker（保留 asset_ids） | 未完成 |  | `section()`、`chunk()`、`assign_chunk_ids` |
