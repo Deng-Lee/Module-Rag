@@ -4391,7 +4391,7 @@ B) Dashboard（Web）
 
 目的：把 `chunk_retrieval_text` 投影到索引空间：dense 向量（Chroma）+ sparse 文本（FTS5），并支持后续混合检索策略。为保证阶段 D 的 Sparse 召回可用，阶段 C 必须提供 sparse 的最小可运行实现（写入 FTS5）。
 
-修改/新增文件（可见变化）：`src/ingestion/stages/embedding/embedding.py`、`src/ingestion/stages/embedding/dense.py`、`src/ingestion/stages/embedding/sparse.py`、`src/ingestion/stages/embedding/hybrid.py`、（如未完成）`src/libs/providers/embedding/fake_embedder.py`。
+修改/新增文件（可见变化）：`src/ingestion/stages/embedding/embedding.py`、`src/ingestion/stages/embedding/dense.py`、`src/ingestion/stages/embedding/sparse.py`、`src/ingestion/stages/embedding/models.py`、`tests/unit/test_embedding_stage.py`。
 
 实现函数（最小集合）：
 
@@ -5702,7 +5702,7 @@ B) Dashboard（Web）
 | C-6 | Transform Pre：md_norm + 图片引用重写 | 完成 | 2026-02-25 | `BaseTransform.apply`、`rewrite_image_links` |
 | C-7 | Chunking：Sectioner + Chunker（保留 asset_ids） | 完成 | 2026-02-25 | `section()`、`chunk()`、`assign_chunk_ids`、`assign_section_ids` |
 | C-8 | Transform Post：检索视图 chunk_retrieval_text | 完成 | 2026-02-25 | `build_chunk_retrieval_text`（模板化） |
-| C-9 | Encoding：dense fake + sparse MVP | 未完成 |  | dense vectors + `{chunk_id,text}` 视图 |
+| C-9 | Encoding：dense fake + sparse MVP | 完成 | 2026-02-25 | dense vectors + `{chunk_id,text}` 视图 |
 | C-10 | Embedding Cache：向量复用 | 未完成 |  | `EmbeddingCache.get/put`、cache key 对齐 canonical |
 | C-11 | Upsert：FS + SQLite + Chroma + FTS5 | 未完成 |  | `ChromaStore.upsert`、`Fts5Store.upsert`、一致性 |
 | C-12 | Ingestion E2E 回归（含 sparse 可用性） | 未完成 |  | `test_ingest_pipeline` + sparse smoke |
