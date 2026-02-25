@@ -4214,7 +4214,7 @@ B) Dashboard（Web）
 
 目的：把 ingestion 的“冻结拓扑 + 稳定 stage 名”落成可运行编排；每个 stage 自动包裹 span，并通过 `on_progress` 回调向上层汇报进度（供 MCP tool 与 dashboard 复用）。
 
-修改/新增文件（可见变化）：`src/ingestion/pipeline.py`、`src/ingestion/errors.py`、`src/ingestion/models/*`、`src/ingestion/stages/__init__.py`。
+修改/新增文件（可见变化）：`src/ingestion/pipeline.py`、`src/ingestion/errors.py`、`src/ingestion/models/__init__.py`、`src/ingestion/stages/__init__.py`、`tests/unit/test_ingestion_pipeline.py`。
 
 实现函数（最小集合）：
 
@@ -5692,7 +5692,7 @@ B) Dashboard（Web）
 
 | 任务编号 | 任务名称 | 状态 | 完成日期 | 备注（关键实现） |
 |---|---|---|---|---|
-| C-1 | IngestionPipeline 骨架 + 进度回调 + trace spans | 未完成 |  | `IngestionPipeline.run`、`run_stage`、`on_progress` |
+| C-1 | IngestionPipeline 骨架 + 进度回调 + trace spans | 完成 | 2026-02-25 | `IngestionPipeline.run`、`run_stage`、`on_progress` |
 | C-2 | Dedup：写盘+sha256+SQLite 决策 | 未完成 |  | `compute_sha256_stream`、`find_version_by_file_hash` |
 | C-3 | Loader Stage：先跑通 Markdown | 未完成 |  | `detect_file_type`、`LoaderStage.run`、`MarkdownLoader.load` |
 | C-4 | PDFLoader MVP：PDF→md + 图片 ref_id 清单 | 未完成 |  | `PdfLoader.load`、图片 manifest/ref_id 稳定 |
