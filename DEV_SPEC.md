@@ -4236,7 +4236,7 @@ B) Dashboard（Web）
 
 目的：把“最早去重”落到接收后第一步；避免重复解析浪费资源，并且为版本管理打基础。
 
-修改/新增文件（可见变化）：`src/ingestion/stages/receive/dedup.py`、`src/ingestion/stages/storage/fs.py`、`src/ingestion/stages/storage/sqlite.py`。
+修改/新增文件（可见变化）：`src/ingestion/stages/receive/dedup.py`、`src/ingestion/stages/storage/fs.py`、`src/ingestion/stages/storage/sqlite.py`、`tests/unit/test_dedup_stage.py`。
 
 实现函数（最小集合）：
 
@@ -5693,7 +5693,7 @@ B) Dashboard（Web）
 | 任务编号 | 任务名称 | 状态 | 完成日期 | 备注（关键实现） |
 |---|---|---|---|---|
 | C-1 | IngestionPipeline 骨架 + 进度回调 + trace spans | 完成 | 2026-02-25 | `IngestionPipeline.run`、`run_stage`、`on_progress` |
-| C-2 | Dedup：写盘+sha256+SQLite 决策 | 未完成 |  | `compute_sha256_stream`、`find_version_by_file_hash` |
+| C-2 | Dedup：写盘+sha256+SQLite 决策 | 完成 | 2026-02-25 | `compute_sha256_stream`、`find_version_by_file_hash` |
 | C-3 | Loader Stage：先跑通 Markdown | 未完成 |  | `detect_file_type`、`LoaderStage.run`、`MarkdownLoader.load` |
 | C-4 | PDFLoader MVP：PDF→md + 图片 ref_id 清单 | 未完成 |  | `PdfLoader.load`、图片 manifest/ref_id 稳定 |
 | C-5 | 资产归一化：ref_id→asset_id + 去重 + 落盘 | 未完成 |  | `AssetNormalizer.normalize`、`FsStore.write_asset` |
