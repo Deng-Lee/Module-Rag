@@ -4,6 +4,7 @@ from ..pipeline import DEFAULT_STAGE_ORDER, StageSpec
 from .receive.dedup import DedupDecision, DedupStage
 from .receive.loader import LoaderStage, detect_file_type
 from .transform.asset_normalize import FsAssetNormalizer
+from .transform.transform_pre import DefaultTransformPre, TransformPreStage
 from .storage.fs import FsStore
 from .storage.assets import AssetStore
 from .storage.sqlite import SqliteStore
@@ -19,4 +20,6 @@ __all__ = [
     "LoaderStage",
     "detect_file_type",
     "FsAssetNormalizer",
+    "DefaultTransformPre",
+    "TransformPreStage",
 ]

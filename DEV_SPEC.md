@@ -2877,7 +2877,8 @@ Dashboard 的目标是：把 ingestion 与 query 两条路径从“黑盒日志�
 
 具体落点（与既有设计对齐）：
 
-* ingestion：图片资产由资产归一化器统一抽取/下载、去重并生成 `asset_id`；md 中图片引用统一改写为 `asset://<asset_id>`；chunk 元数据挂载 `asset_ids[]` 与锚点信息；
+* ingestion（Markdown）：图片资产由资产归一化器统一抽取/下载、去重并生成 `asset_id`；在 `transformer.pre` 将 Markdown 图片链接重写为 `asset://<asset_id>`；chunk 元数据挂载 `asset_ids[]` 与锚点信息；
+* ingestion（PDF）：`PdfLoader` 产出“文本 md + 图片引用清单（assets[]，含 anchor）”，不在 md 中注入图片占位符；资产归一化后得到 `ref_id -> asset_id` 映射，随后在 **chunk 生成后** 依据 `assets[].anchor`（例如 `page_number + order`；可增强 `xref/object_id`；`bbox` 为可选且需声明坐标系）将 `asset_ids[]` 挂载到对应 chunk 的 metadata（按页/就近/兜底规则），从而实现与 Markdown 一致的“按 `asset_id` 返回/拉取”语义；
 * query：MCP 返回不直接携带图片 base64，而是返回 `asset_ids[]`（以及引用/定位信息）；需要图片内容时由 client 通过 `library.query_assets`（批量缩略图）或后续 `library.get_asset`/MCP Resource 按需获取；
 * OCR/Caption：作为 `transformer.post.*`（或独立 `enrichment.*`）provider 写入可检索文本视图/增强字段，并在 trace 中记录 `provider_id/profile_id` 以便 A/B 对比与回放诊断。
 
@@ -4323,19 +4324,19 @@ B) Dashboard（Web）
 
 6. **C-6 Transform Pre：事实层规范化（md_norm）+ 图片引用重写**
 
-目的：在不改变语义的前提下统一 md 表现（换行/空白/标题等），并把图片引用重写为统一锚点形式，保证后续切分与引用一致。
+目的：在不改变语义的前提下统一 md 表现（换行/空白/标题等），并将 **Markdown 文档**中的图片链接重写为统一形式 `asset://<asset_id>`，保证后续切分与引用一致；PDF 的图片关联不依赖文本重写，而是在 chunk 生成后依据 `anchor -> asset_id` 挂载到 chunk metadata。
 
-修改/新增文件（可见变化）：`src/ingestion/stages/transform/transform_pre.py`、`src/ingestion/stages/transform/base_transform.py`、`src/libs/interfaces/loader/base_transform.py`。
+修改/新增文件（可见变化）：`src/ingestion/stages/transform/transform_pre.py`、`src/ingestion/stages/transform/base_transform.py`、`src/libs/interfaces/loader/base_transform.py`、`tests/unit/test_transform_pre.py`。
 
 实现函数（最小集合）：
 
-* `BaseTransform.apply(md, *, asset_map, profile_id) -> md_norm`
-* `rewrite_image_links(md, ref_id_to_asset_id) -> md_norm`
+* `BaseTransform.apply(md, *, ref_id_to_asset_id, profile_id) -> md_norm`
+* `rewrite_image_links(md, ref_id_to_asset_id) -> md_norm`（仅对 Markdown 语法生效）
 
 验收标准：
 
 * 对同一输入多次运行得到相同 `md_norm`（deterministic）；
-* md 中图片引用被替换为统一形式（例如 `asset://asset_id`），且可在后续 chunk 中保留关联。
+* Markdown 文档中图片引用被替换为统一形式（例如 `asset://asset_id`），且可在后续 chunk 中保留关联；PDF 的 `asset_id` 关联通过后续“按 anchor 挂载 chunk metadata”完成。
 
 测试方法：
 
@@ -5697,7 +5698,7 @@ B) Dashboard（Web）
 | C-3 | Loader Stage：先跑通 Markdown | 完成 | 2026-02-25 | `detect_file_type`、`LoaderStage.run`、`MarkdownLoader.load` |
 | C-4 | PDFLoader MVP：PDF→md + 图片 ref_id 清单 | 完成 | 2026-02-25 | `PdfLoader.load`、图片 manifest/ref_id 稳定 |
 | C-5 | 资产归一化：ref_id→asset_id + 去重 + 落盘 | 完成 | 2026-02-25 | `AssetNormalizer.normalize`、`AssetStore.write_bytes` |
-| C-6 | Transform Pre：md_norm + 图片引用重写 | 未完成 |  | `BaseTransform.apply`、`rewrite_image_links` |
+| C-6 | Transform Pre：md_norm + 图片引用重写 | 完成 | 2026-02-25 | `BaseTransform.apply`、`rewrite_image_links` |
 | C-7 | Chunking：Sectioner + Chunker（保留 asset_ids） | 未完成 |  | `section()`、`chunk()`、`assign_chunk_ids` |
 | C-8 | Transform Post：检索视图 chunk_retrieval_text | 未完成 |  | `build_chunk_retrieval_text`（模板化） |
 | C-9 | Encoding：dense fake + sparse MVP | 未完成 |  | dense vectors + `{chunk_id,text}` 视图 |

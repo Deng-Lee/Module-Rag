@@ -1,6 +1,8 @@
-from .loader import AssetNormalizer, AssetRef, LoaderOutput, ParseSummary, BaseLoader, NormalizedAssets
+from .base_transform import BaseTransform
+from .loader import AssetNormalizer, AssetRef, BaseLoader, LoaderOutput, NormalizedAssets, ParseSummary
 
 __all__ = [
+    "BaseTransform",
     "AssetRef",
     "ParseSummary",
     "LoaderOutput",
