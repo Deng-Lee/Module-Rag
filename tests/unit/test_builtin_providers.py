@@ -3,6 +3,7 @@ from __future__ import annotations
 from src.libs.providers.bootstrap import register_builtin_providers
 from src.libs.providers.embedding import FakeEmbedder
 from src.libs.providers.llm import FakeLLM
+from src.libs.providers.loader import MarkdownLoader
 from src.libs.providers.reranker import NoopReranker
 from src.libs.providers.vector_store import InMemoryVectorIndex
 from src.libs.registry import ProviderRegistry
@@ -53,12 +54,14 @@ def test_register_builtin_providers() -> None:
 
     assert reg.has("embedder", "embedder.fake")
     assert reg.has("embedder", "embedder.fake_alt")
+    assert reg.has("loader", "loader.markdown")
     assert reg.has("llm", "llm.fake")
     assert reg.has("vector_index", "vector.in_memory")
     assert reg.has("reranker", "reranker.noop")
 
     assert isinstance(reg.create("embedder", "embedder.fake"), FakeEmbedder)
     assert isinstance(reg.create("embedder", "embedder.fake_alt"), FakeEmbedder)
+    assert isinstance(reg.create("loader", "loader.markdown"), MarkdownLoader)
     assert isinstance(reg.create("llm", "llm.fake"), FakeLLM)
     assert isinstance(reg.create("vector_index", "vector.in_memory"), InMemoryVectorIndex)
     assert isinstance(reg.create("reranker", "reranker.noop"), NoopReranker)
