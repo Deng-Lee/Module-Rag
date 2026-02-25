@@ -2387,6 +2387,42 @@ Retriever 的可插拔不改变查询拓扑（QueryIR → Retrieve → Fusion �
 
 > 约束：所有 Factory 的选择依据必须来自配置（Strategy as Config），并参与 `strategy_config_id`（3.4.3）；不得在业务代码中硬编码 provider 分支。
 
+Provider / Registry / Factory 的关系（以 Loader 为例）
+
+* Loader：接口契约（“插座标准”），定义统一输入/输出形态，例如 `BaseLoader.load(input) -> LoaderOutput`。
+* PdfLoader / MarkdownLoader：Provider（具体实现，“插头本体”），实现 Loader 契约，但内部解析策略不同（PDF 走 PDF 解析，MD 走 Markdown 解析）。
+* ProviderRegistry：注册表（“插头仓库”），维护 `provider_id -> provider_ctor` 映射；只负责“按名字创建实例”，不关心业务编排。
+* LoaderFactory：装配器（“装配台”），从配置解析 `provider_id + params`，调用 `ProviderRegistry.create(...)` 实例化对应 Provider，并把实例交给流水线使用。
+
+通用装配要点（对所有 Factory 都成立）
+
+* 各类 `*Factory`（如 `LoaderFactory/SplitterFactory/...`）接收同一份运行时 `cfg`（dict）。
+* Factory 先从 `cfg` 中抽取该 `kind` 的 `{provider_id, params}`（仅解析配置，不实现业务能力）。
+* Factory 调用 `ProviderRegistry.create(kind, provider_id, **params)` 获取并实例化对应 Provider。
+* Factory 返回“满足接口契约的实例”，上层流水线直接使用该实例；上层不关心具体实现类名。
+
+装配与调用的最小数据流（示意）：
+
+```text
+启动入口（例如 MCP Server main）
+  └─ 读取 settings.yaml/环境变量/CLI 覆盖项 -> 解析为 cfg: dict（运行时配置快照）
+
+cfg（运行时配置快照）
+  └─ cfg["providers"]["loader"] = { "provider_id": "loader.pdf", "params": {...} }
+        │
+        ▼
+LoaderFactory.make_loader(cfg)
+        │  (解析 provider_id + params)
+        ▼
+ProviderRegistry.create(kind="loader", provider_id="loader.pdf", **params)
+        │  (返回具体实现实例)
+        ▼
+PdfLoader.load(input_file)  ──>  LoaderOutput { md, assets[], parse_summary, ... }
+        │
+        ▼
+进入后续 ingestion 流水线（asset normalize / transform / chunk / encode / upsert）
+```
+
 | 模块（接口） | 抽象工厂（Factory） | 主要职责（摘要） | 配置切换点（摘要） | 必记版本锚点（摘要） |
 | --- | --- | --- | --- | --- |
 | Loader（`BaseLoader`） | `LoaderFactory` | 选择解析器并产出解析事实（md + assets） | `loader.<type>` | `loader_name/version/parse_profile_id` |
