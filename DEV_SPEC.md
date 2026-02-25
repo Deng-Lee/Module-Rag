@@ -510,7 +510,7 @@ Sectioner 的职责仅限于**结构边界确定与路径构建**，不得进行
 
 Chunker 在 Section 内生成 chunk_text，用于 embedding 与检索。
 
-默认策略：`chunker.rcts_within_section`（基于 LangChain RecursiveCharacterTextSplitter）。
+默认策略：`chunker.rcts_within_section`（RCTS-like：递归分隔符切分；实现可为内置纯 Python 或外部库适配）。
 
 **设计原则**：
 
@@ -4347,18 +4347,19 @@ B) Dashboard（Web）
 
 目的：把事实层 md 变成可检索的 `ChunkIR[]`，并保持图片锚点/引用能映射到 chunk（为多模态召回与展示打基础）。
 
-修改/新增文件（可见变化）：`src/ingestion/stages/chunking/sectioner.py`、`src/ingestion/stages/chunking/chunker.py`、（如未完成）`src/libs/providers/splitter/*`。
+修改/新增文件（可见变化）：`src/libs/providers/splitter/markdown_headings.py`、`src/libs/providers/splitter/simple_chunker.py`、`src/ingestion/stages/chunking/sectioner.py`、`src/ingestion/stages/chunking/chunker.py`、`tests/unit/test_chunking.py`。
 
 实现函数（最小集合）：
 
 * `Sectioner.section(md_norm) -> list[SectionIR]`
 * `Chunker.chunk(sections) -> list[ChunkIR]`
+* `assign_section_ids(doc_id, sections) -> sections`（按 spec 生成 `section_id`，不包含 version_id）
 * `assign_chunk_ids(chunks) -> chunks`（按 spec 的 fingerprint/canonical 规则）
 
 验收标准：
 
 * 给定一个 md 文档可生成 `ChunkIR[]`，每个 chunk 有稳定 `chunk_id`；
-* chunk 中保留 `asset_ids`（来自图片锚点/引用），用于 query 返回。
+* Markdown：chunk 中保留 `asset_ids`（来自 `asset://<asset_id>` 重写后的引用），用于 query 返回；PDF 的图片关联在后续阶段通过 `assets[].anchor -> chunk metadata` 挂载完成。
 
 测试方法：
 
@@ -5699,7 +5700,7 @@ B) Dashboard（Web）
 | C-4 | PDFLoader MVP：PDF→md + 图片 ref_id 清单 | 完成 | 2026-02-25 | `PdfLoader.load`、图片 manifest/ref_id 稳定 |
 | C-5 | 资产归一化：ref_id→asset_id + 去重 + 落盘 | 完成 | 2026-02-25 | `AssetNormalizer.normalize`、`AssetStore.write_bytes` |
 | C-6 | Transform Pre：md_norm + 图片引用重写 | 完成 | 2026-02-25 | `BaseTransform.apply`、`rewrite_image_links` |
-| C-7 | Chunking：Sectioner + Chunker（保留 asset_ids） | 未完成 |  | `section()`、`chunk()`、`assign_chunk_ids` |
+| C-7 | Chunking：Sectioner + Chunker（保留 asset_ids） | 完成 | 2026-02-25 | `section()`、`chunk()`、`assign_chunk_ids`、`assign_section_ids` |
 | C-8 | Transform Post：检索视图 chunk_retrieval_text | 未完成 |  | `build_chunk_retrieval_text`（模板化） |
 | C-9 | Encoding：dense fake + sparse MVP | 未完成 |  | dense vectors + `{chunk_id,text}` 视图 |
 | C-10 | Embedding Cache：向量复用 | 未完成 |  | `EmbeddingCache.get/put`、cache key 对齐 canonical |

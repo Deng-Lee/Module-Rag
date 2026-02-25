@@ -1,4 +1,17 @@
 providers:
+  loader:
+    provider_id: loader.markdown
+  sectioner:
+    provider_id: sectioner.markdown_headings
+    params:
+      max_section_level: 2
+      include_heading: true
+  chunker:
+    provider_id: chunker.rcts_within_section
+    params:
+      chunk_size: 800
+      chunk_overlap: 120
+      separators: ["\n\n", "\n", " ", ""]
   embedder:
     provider_id: embedder.fake
     params:
