@@ -16,3 +16,7 @@ venv/
 
 # os/editor
 .DS_Store
+
+# local notes (do not commit)
+interview.md
+INTERVIEW.md
