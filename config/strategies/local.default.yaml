@@ -1,0 +1,13 @@
+providers:
+  embedder:
+    provider_id: embedder.fake
+    params:
+      dim: 8
+  llm:
+    provider_id: llm.fake
+    params:
+      name: fake-llm
+  vector_index:
+    provider_id: vector.in_memory
+  reranker:
+    provider_id: reranker.noop

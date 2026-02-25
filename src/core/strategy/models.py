@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
+from hashlib import sha256
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -111,3 +113,57 @@ class Settings:
             defaults=DefaultsSettings.from_dict(defaults),
             raw=raw,
         )
+
+
+@dataclass
+class StrategyConfig:
+    """Resolved strategy config that can drive factories."""
+
+    strategy_id: str
+    strategy_config_id: str
+    providers: dict[str, Any]
+    raw: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, strategy_id: str, raw: Mapping[str, Any]) -> "StrategyConfig":
+        if not isinstance(raw, Mapping):
+            raise TypeError("strategy config must be a mapping")
+
+        raw_dict = dict(raw)
+        providers = raw_dict.get("providers")
+        if not isinstance(providers, Mapping):
+            raise TypeError("strategy config missing 'providers' mapping")
+
+        cfg_id = _compute_strategy_config_id(raw_dict)
+        return cls(
+            strategy_id=strategy_id,
+            strategy_config_id=cfg_id,
+            providers={k: dict(v) if isinstance(v, Mapping) else v for k, v in providers.items()},
+            raw=raw_dict,
+        )
+
+    def resolve_provider(self, kind: str) -> tuple[str, dict[str, Any]]:
+        if kind not in self.providers:
+            raise KeyError(f"missing provider config for kind={kind}")
+
+        value = self.providers[kind]
+        if isinstance(value, str):
+            return value, {}
+        if isinstance(value, Mapping):
+            provider_id = value.get("provider_id") or value.get("id")
+            if not provider_id:
+                raise ValueError(f"missing provider_id for kind={kind}")
+            params = value.get("params")
+            if params is None:
+                params = {k: v for k, v in value.items() if k not in {"provider_id", "id"}}
+            return str(provider_id), dict(params)
+        raise TypeError(f"invalid provider config for kind={kind}")
+
+    def to_factory_cfg(self) -> dict[str, Any]:
+        return {"providers": self.providers}
+
+
+def _compute_strategy_config_id(raw: Mapping[str, Any]) -> str:
+    canonical = json.dumps(raw, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    digest = sha256(canonical.encode("utf-8")).hexdigest()
+    return f"scfg_{digest}"

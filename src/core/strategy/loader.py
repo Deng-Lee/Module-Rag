@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .models import Settings
+from .models import Settings, StrategyConfig
 
 
 def _resolve_path(root: Path, p: Path) -> Path:
@@ -112,3 +112,31 @@ def load_settings(path: str | Path) -> Settings:
 
     return s
 
+
+class StrategyLoader:
+    def __init__(self, root: Path | None = None) -> None:
+        if root is None:
+            # .../src/core/strategy/loader.py -> repo root
+            root = Path(__file__).resolve().parents[3]
+        self.root = root
+        self.strategies_dir = self.root / "config" / "strategies"
+
+    def load(self, strategy_config_id: str) -> StrategyConfig:
+        path = self._resolve_strategy_path(strategy_config_id)
+        raw = _load_yaml_mapping(path)
+        return StrategyConfig.from_dict(strategy_config_id, raw)
+
+    def _resolve_strategy_path(self, strategy_config_id: str) -> Path:
+        p = Path(strategy_config_id)
+        if p.suffix in {".yml", ".yaml"}:
+            if p.is_absolute():
+                return p
+            return (self.root / p).resolve()
+
+        candidate = (self.strategies_dir / f"{strategy_config_id}.yaml").resolve()
+        if candidate.exists():
+            return candidate
+        candidate_yml = (self.strategies_dir / f"{strategy_config_id}.yml").resolve()
+        if candidate_yml.exists():
+            return candidate_yml
+        raise FileNotFoundError(f"strategy config not found: {strategy_config_id}")

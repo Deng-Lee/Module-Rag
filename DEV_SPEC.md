@@ -4169,7 +4169,7 @@ B) Dashboard（Web）
 
 目的：让 `core/strategy/*` 输出的配置结构能直接驱动工厂装配（不必等到完整 ingestion/query 才发现“配置落不下来”）。
 
-修改/新增文件（可见变化）：`src/core/strategy/models.py`、`src/core/strategy/loader.py`（若未完成）、（可选）`config/strategies/ingestion/*`、`config/strategies/query/*` 的最小示例。
+修改/新增文件（可见变化）：`src/core/strategy/models.py`、`src/core/strategy/loader.py`、`config/strategies/local.default.yaml`、`tests/unit/test_strategy_loader.py`。
 
 实现函数（最小集合）：
 
@@ -5685,7 +5685,7 @@ B) Dashboard（Web）
 | B-2 | 工厂层 Factories（装配 graph） | 完成 | 2026-02-25 | `make_*` 系列装配、可选模块 `noop` |
 | B-3 | 接口契约 Interfaces（按能力域） | 完成 | 2026-02-25 | `BaseLoader/Sectioner/Chunker/Embedder/Retriever/...` |
 | B-4 | 默认可运行实现（Fake/Noop） | 完成 | 2026-02-25 | `FakeEmbedder/FakeLLM/InMemoryVectorIndex/NoopReranker` + `register_builtin_providers` |
-| B-5 | Strategy 展开到工厂输入 | 未完成 |  | `StrategyLoader.load`、`resolve_provider` |
+| B-5 | Strategy 展开到工厂输入 | 完成 | 2026-02-25 | `StrategyLoader.load`、`resolve_provider`、`config/strategies/local.default.yaml` |
 | B-6 | Provider Swap 回归样例（A/B） | 未完成 |  | `build_runtime_from_strategy()` + trace 归因字段 |
 
 #### 6.4.3 阶段 C
