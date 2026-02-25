@@ -10,6 +10,8 @@ from ....libs.interfaces.vector_store import VectorItem
 @dataclass
 class DenseEncoded:
     items: list[VectorItem]
+    cache_hits: int = 0
+    cache_misses: int = 0
 
 
 @dataclass

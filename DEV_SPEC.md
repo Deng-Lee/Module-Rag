@@ -4413,13 +4413,13 @@ B) Dashboard（Web）
 
 目的：落实 DEV_SPEC 的“canonical + cache 复用”：同一 `chunk_retrieval_text`（同 profile）重复编码时命中缓存，避免重复花费；并在 trace/aggregates 中体现 hit/miss，便于成本与性能诊断。
 
-修改/新增文件（可见变化）：`src/ingestion/stages/embedding/dense.py`（或 `embedding.py`）、`src/libs/providers/embedding/cache.py`、`cache/` 目录使用约定（已在 5.2）。
+修改/新增文件（可见变化）：`src/ingestion/stages/embedding/dense.py`、`src/ingestion/stages/embedding/embedding.py`、`src/libs/providers/embedding/cache.py`、`tests/unit/test_embedding_cache.py`。
 
 实现函数（最小集合）：
 
 * `EmbeddingCache.get(key) -> vector | None`
 * `EmbeddingCache.put(key, vector) -> None`
-* `make_embedding_cache_key(text_norm_profile_id, content_hash, embedder_id) -> str`
+* `make_embedding_cache_key(text_norm_profile_id, content_hash, embedder_id, embedder_version) -> str`
 
 验收标准：
 
@@ -5703,7 +5703,7 @@ B) Dashboard（Web）
 | C-7 | Chunking：Sectioner + Chunker（保留 asset_ids） | 完成 | 2026-02-25 | `section()`、`chunk()`、`assign_chunk_ids`、`assign_section_ids` |
 | C-8 | Transform Post：检索视图 chunk_retrieval_text | 完成 | 2026-02-25 | `build_chunk_retrieval_text`（模板化） |
 | C-9 | Encoding：dense fake + sparse MVP | 完成 | 2026-02-25 | dense vectors + `{chunk_id,text}` 视图 |
-| C-10 | Embedding Cache：向量复用 | 未完成 |  | `EmbeddingCache.get/put`、cache key 对齐 canonical |
+| C-10 | Embedding Cache：向量复用 | 完成 | 2026-02-25 | `EmbeddingCache.get/put`、cache key 对齐 canonical |
 | C-11 | Upsert：FS + SQLite + Chroma + FTS5 | 未完成 |  | `ChromaStore.upsert`、`Fts5Store.upsert`、一致性 |
 | C-12 | Ingestion E2E 回归（含 sparse 可用性） | 未完成 |  | `test_ingest_pipeline` + sparse smoke |
 
