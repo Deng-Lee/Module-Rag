@@ -52,11 +52,13 @@ def test_register_builtin_providers() -> None:
     register_builtin_providers(reg)
 
     assert reg.has("embedder", "embedder.fake")
+    assert reg.has("embedder", "embedder.fake_alt")
     assert reg.has("llm", "llm.fake")
     assert reg.has("vector_index", "vector.in_memory")
     assert reg.has("reranker", "reranker.noop")
 
     assert isinstance(reg.create("embedder", "embedder.fake"), FakeEmbedder)
+    assert isinstance(reg.create("embedder", "embedder.fake_alt"), FakeEmbedder)
     assert isinstance(reg.create("llm", "llm.fake"), FakeLLM)
     assert isinstance(reg.create("vector_index", "vector.in_memory"), InMemoryVectorIndex)
     assert isinstance(reg.create("reranker", "reranker.noop"), NoopReranker)

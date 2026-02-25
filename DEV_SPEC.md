@@ -4190,7 +4190,7 @@ B) Dashboard（Web）
 
 目的：用一个最小回归用例证明“替换 provider 不改业务代码”：同一接口调用下，切换 provider 产生可观察差异（并通过 trace 归因）。
 
-修改/新增文件（可见变化）：`tests/unit/test_provider_swap.py`（或同类）、（可选）`config/strategies/*` 增加第二套 provider 配置。
+修改/新增文件（可见变化）：`src/core/strategy/runtime.py`、`tests/unit/test_provider_swap.py`、`config/strategies/local.alt.yaml`。
 
 实现函数（最小集合）：
 
@@ -5686,7 +5686,7 @@ B) Dashboard（Web）
 | B-3 | 接口契约 Interfaces（按能力域） | 完成 | 2026-02-25 | `BaseLoader/Sectioner/Chunker/Embedder/Retriever/...` |
 | B-4 | 默认可运行实现（Fake/Noop） | 完成 | 2026-02-25 | `FakeEmbedder/FakeLLM/InMemoryVectorIndex/NoopReranker` + `register_builtin_providers` |
 | B-5 | Strategy 展开到工厂输入 | 完成 | 2026-02-25 | `StrategyLoader.load`、`resolve_provider`、`config/strategies/local.default.yaml` |
-| B-6 | Provider Swap 回归样例（A/B） | 未完成 |  | `build_runtime_from_strategy()` + trace 归因字段 |
+| B-6 | Provider Swap 回归样例（A/B） | 完成 | 2026-02-25 | `build_runtime_from_strategy()` + `tests/unit/test_provider_swap.py` |
 
 #### 6.4.3 阶段 C
 

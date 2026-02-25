@@ -11,6 +11,7 @@ def register_builtin_providers(registry: ProviderRegistry) -> None:
     """Register default providers for local/dev runs."""
 
     registry.register("embedder", "embedder.fake", FakeEmbedder)
+    registry.register("embedder", "embedder.fake_alt", FakeEmbedder)
     registry.register("llm", "llm.fake", FakeLLM)
     registry.register("vector_index", "vector.in_memory", InMemoryVectorIndex)
     registry.register("reranker", "reranker.noop", NoopReranker)
