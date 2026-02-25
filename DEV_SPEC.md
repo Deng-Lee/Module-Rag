@@ -4303,13 +4303,13 @@ B) Dashboard（Web）
 
 目的：统一多模态资产的存储与引用：把各种来源的图片引用归一到稳定 `asset_id`，并落到 `data/assets/`；为后续 query 的 `asset_ids` 返回与按需拉取打基础。
 
-修改/新增文件（可见变化）：`src/ingestion/stages/assets/asset_normalize.py`、`src/ingestion/stages/storage/fs.py`（补齐 assets 写入与目录规则）。
+修改/新增文件（可见变化）：`src/ingestion/stages/transform/asset_normalize.py`、`src/ingestion/stages/storage/assets.py`、`tests/unit/test_asset_normalizer.py`。
 
 实现函数（最小集合）：
 
-* `AssetNormalizer.normalize(assets_manifest) -> NormalizedAssets`（返回 `ref_id->asset_id` 映射与写盘计划）
-* `download_http_asset(url) -> bytes`（可 stub：先只支持本地相对路径）
-* `FsStore.write_asset(asset_id, bytes, ext, kind="original") -> path`
+* `AssetNormalizer.normalize(assets_manifest) -> NormalizedAssets`（返回 `ref_id->asset_id` 映射与写盘结果）
+* `download_http_asset(url) -> bytes`（支持 http(s)；本地相对路径同样支持）
+* `AssetStore.write_bytes(data, suffix) -> (asset_id, path, reused)`
 
 验收标准：
 
@@ -5696,7 +5696,7 @@ B) Dashboard（Web）
 | C-2 | Dedup：写盘+sha256+SQLite 决策 | 完成 | 2026-02-25 | `compute_sha256_stream`、`find_version_by_file_hash` |
 | C-3 | Loader Stage：先跑通 Markdown | 完成 | 2026-02-25 | `detect_file_type`、`LoaderStage.run`、`MarkdownLoader.load` |
 | C-4 | PDFLoader MVP：PDF→md + 图片 ref_id 清单 | 完成 | 2026-02-25 | `PdfLoader.load`、图片 manifest/ref_id 稳定 |
-| C-5 | 资产归一化：ref_id→asset_id + 去重 + 落盘 | 未完成 |  | `AssetNormalizer.normalize`、`FsStore.write_asset` |
+| C-5 | 资产归一化：ref_id→asset_id + 去重 + 落盘 | 完成 | 2026-02-25 | `AssetNormalizer.normalize`、`AssetStore.write_bytes` |
 | C-6 | Transform Pre：md_norm + 图片引用重写 | 未完成 |  | `BaseTransform.apply`、`rewrite_image_links` |
 | C-7 | Chunking：Sectioner + Chunker（保留 asset_ids） | 未完成 |  | `section()`、`chunk()`、`assign_chunk_ids` |
 | C-8 | Transform Post：检索视图 chunk_retrieval_text | 未完成 |  | `build_chunk_retrieval_text`（模板化） |
