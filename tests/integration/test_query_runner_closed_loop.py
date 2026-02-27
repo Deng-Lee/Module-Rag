@@ -26,6 +26,7 @@ from src.libs.providers.splitter.markdown_headings import MarkdownHeadingsSectio
 from src.libs.providers.splitter.recursive_chunker import RecursiveCharChunkerWithinSection
 from src.libs.providers.vector_store.chroma_lite import ChromaLiteVectorIndex
 from src.libs.providers.vector_store.chroma_retriever import ChromaDenseRetriever
+from src.libs.providers.vector_store.fts5_retriever import Fts5Retriever
 
 
 @pytest.mark.integration
@@ -105,6 +106,7 @@ def test_query_runner_on_ingested_db_returns_sources(tmp_path: Path, tmp_workdir
             embedder=embed,
             vector_index=vector_idx,
             retriever=ChromaDenseRetriever(embedder=embed, vector_index=vector_idx),
+            sparse_retriever=Fts5Retriever(db_path=str(sqlite_dir / "fts.sqlite")),
             sqlite=SqliteStore(db_path=sqlite_dir / "app.sqlite"),
         )
 

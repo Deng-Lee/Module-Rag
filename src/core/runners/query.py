@@ -74,6 +74,25 @@ def _build_query_runtime(strategy_config_id: str, *, settings_path: str | Path) 
         **retriever_params,
     )
 
+    # Sparse retriever (optional).
+    sparse_retriever = None
+    try:
+        sparse_provider_id, sparse_params = strategy.resolve_provider("sparse_retriever")
+        sparse_retriever = registry.create(
+            "sparse_retriever",
+            sparse_provider_id,
+            db_path=str(settings.paths.sqlite_dir / "fts.sqlite"),
+            **(sparse_params or {}),
+        )
+    except Exception:
+        sparse_retriever = None
+
     sqlite = SqliteStore(db_path=settings.paths.sqlite_dir / "app.sqlite")
 
-    return QueryRuntime(embedder=embedder, vector_index=vector_index, retriever=retriever, sqlite=sqlite)
+    return QueryRuntime(
+        embedder=embedder,
+        vector_index=vector_index,
+        retriever=retriever,
+        sparse_retriever=sparse_retriever,
+        sqlite=sqlite,
+    )

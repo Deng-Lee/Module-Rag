@@ -37,3 +37,4 @@ class QueryRuntime:
     vector_index: VectorIndex
     retriever: Retriever
     sqlite: SqliteStore
+    sparse_retriever: Retriever | None = None

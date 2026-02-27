@@ -4532,11 +4532,11 @@ B) Dashboard（Web）
 
 目的：完成“稀疏召回”的端到端：query → FTS5 query → candidates；为 Hybrid 与回退策略提供第二路召回。
 
-修改/新增文件（可见变化）：`src/libs/interfaces/vector_store/sparse_index.py`、`src/libs/interfaces/vector_store/retriever.py`（sparse 分支或独立接口）、`src/libs/providers/vector_store/fts5_retriever.py`（或同类）、`src/core/query_engine/stages/retrieve_sparse.py`。
+修改/新增文件（可见变化）：`src/libs/providers/vector_store/fts5_retriever.py`、`src/libs/providers/bootstrap.py`、`config/strategies/local.default.yaml`、`config/strategies/local.alt.yaml`、`src/core/query_engine/models.py`、`src/core/query_engine/stages/retrieve_sparse.py`、`src/core/runners/query.py`、`tests/unit/test_fts5_retriever.py`。
 
 实现函数（最小集合）：
 
-* `Fts5Retriever.retrieve(query_text, top_k, filters=None) -> list[Candidate]`
+* `Fts5Retriever.retrieve(query_text, top_k) -> list[Candidate]`
 * `build_fts5_query(query_norm) -> str`（最小 query parser，后续可增强）
 
 验收标准：
@@ -5713,7 +5713,7 @@ B) Dashboard（Web）
 |---|---|---|---|---|
 | D-1 | QueryRunner + QueryPipeline 骨架（无 LLM） | 完成 | 2026-02-27 | `QueryRunner.run`（TraceContext + ResponseIR）、`QueryPipeline.run`（query_norm→dense→format）、extractive 输出 |
 | D-2 | Dense-only：Chroma Top-K 召回 | 完成 | 2026-02-27 | `ChromaDenseRetriever.retrieve`（embed+query）、`retrieve_dense` 改为 retriever provider 驱动 |
-| D-3 | Sparse-only：FTS5 Top-K 召回 | 未完成 |  | `build_fts5_query`、`Fts5Retriever.retrieve` |
+| D-3 | Sparse-only：FTS5 Top-K 召回 | 完成 | 2026-02-27 | `build_fts5_query`、`Fts5Retriever.retrieve`、`SparseRetrieveStage` |
 | D-4 | Hybrid 编排：Dense+Sparse 并行候选 | 未完成 |  | `retrieval.candidates` events（dense/sparse） |
 | D-5 | Fusion：RRF 融合排序 | 未完成 |  | `RrfFusion.fuse`、按 chunk_id 去重 |
 | D-6 | Rerank（可选）+ 回退 | 未完成 |  | `rerank_with_fallback`、异常降级 |

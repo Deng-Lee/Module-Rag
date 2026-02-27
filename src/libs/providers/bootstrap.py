@@ -12,6 +12,7 @@ from .splitter.simple_chunker import SimpleCharChunkerWithinSection
 from .vector_store.in_memory import InMemoryVectorIndex
 from .vector_store.chroma_lite import ChromaLiteVectorIndex
 from .vector_store.chroma_retriever import ChromaDenseRetriever
+from .vector_store.fts5_retriever import Fts5Retriever
 
 
 def register_builtin_providers(registry: ProviderRegistry) -> None:
@@ -28,4 +29,5 @@ def register_builtin_providers(registry: ProviderRegistry) -> None:
     registry.register("vector_index", "vector.in_memory", InMemoryVectorIndex)
     registry.register("vector_index", "vector.chroma_lite", ChromaLiteVectorIndex)
     registry.register("retriever", "retriever.chroma_dense", ChromaDenseRetriever)
+    registry.register("sparse_retriever", "sparse_retriever.fts5", Fts5Retriever)
     registry.register("reranker", "reranker.noop", NoopReranker)

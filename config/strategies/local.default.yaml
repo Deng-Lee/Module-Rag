@@ -26,5 +26,7 @@ providers:
     provider_id: retriever.chroma_dense
     params:
       text_norm_profile_id: default
+  sparse_retriever:
+    provider_id: sparse_retriever.fts5
   reranker:
     provider_id: reranker.noop

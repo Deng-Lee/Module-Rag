@@ -9,6 +9,7 @@ from src.libs.providers.embedding.fake_embedder import FakeEmbedder
 from src.libs.providers.vector_store.in_memory import InMemoryVectorIndex
 from src.core.query_engine.models import QueryRuntime
 from src.libs.providers.vector_store.chroma_retriever import ChromaDenseRetriever
+from src.libs.providers.vector_store.fts5_retriever import Fts5Retriever
 
 
 def test_query_runner_spans_and_extractive_response(tmp_path: Path) -> None:
@@ -42,6 +43,7 @@ def test_query_runner_spans_and_extractive_response(tmp_path: Path) -> None:
             embedder=embedder,
             vector_index=vec,
             retriever=ChromaDenseRetriever(embedder=embedder, vector_index=vec),
+            sparse_retriever=None,
             sqlite=sqlite,
         )
 
@@ -65,6 +67,14 @@ def test_query_runner_empty_query() -> None:
     vec = InMemoryVectorIndex()
     sqlite = SqliteStore(db_path=Path(":memory:"))  # type: ignore[arg-type]
     retriever = ChromaDenseRetriever(embedder=embedder, vector_index=vec)
-    runner = QueryRunner(runtime_builder=lambda _: QueryRuntime(embedder=embedder, vector_index=vec, retriever=retriever, sqlite=sqlite))  # type: ignore[arg-type]
+    runner = QueryRunner(
+        runtime_builder=lambda _: QueryRuntime(
+            embedder=embedder,
+            vector_index=vec,
+            retriever=retriever,
+            sparse_retriever=None,
+            sqlite=sqlite,
+        )
+    )  # type: ignore[arg-type]
     resp = runner.run("   ", strategy_config_id="local.default", top_k=3)
     assert "空查询" in resp.content_md
