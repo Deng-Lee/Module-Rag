@@ -1,0 +1,37 @@
+{
+  "docs": [
+    {
+      "name": "doc_cache",
+      "md": "# Embedding Cache\n\ncanonical() ensures stable content_hash.\n\ncontent_hash + text_norm_profile_id drives cache reuse.\n"
+    },
+    {
+      "name": "doc_fts5",
+      "md": "# SQLite FTS5\n\nFTS5 builds an inverted index for keyword search.\n\nBM25 ranks matched rows efficiently.\n"
+    },
+    {
+      "name": "doc_fusion",
+      "md": "# Fusion\n\nRRF (reciprocal rank fusion) merges dense and sparse results.\n\nRerank stage must have fallback when provider fails.\n"
+    }
+  ],
+  "queries": [
+    {
+      "id": "q_cache",
+      "query": "How does canonical affect content_hash for embedding cache?",
+      "k": 5,
+      "expected_terms": ["content_hash", "canonical"]
+    },
+    {
+      "id": "q_fts5",
+      "query": "Explain SQLite FTS5 inverted index and BM25",
+      "k": 5,
+      "expected_terms": ["FTS5", "BM25", "inverted"]
+    },
+    {
+      "id": "q_rrf",
+      "query": "What is RRF fusion in hybrid retrieval?",
+      "k": 5,
+      "expected_terms": ["RRF", "fusion"]
+    }
+  ]
+}
+

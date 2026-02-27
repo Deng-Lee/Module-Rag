@@ -4661,12 +4661,12 @@ B) Dashboard（Web）
 
 目的：固化检索链路的集成回归：在小数据集上对比 Dense-only / Sparse-only / Hybrid / +RRF / +Rerank 的召回与排序变化，为后续评估面板与门禁打基础。
 
-修改/新增文件（可见变化）：`tests/integration/test_retrieval_pipeline.py`（或同类）、`tests/datasets/retrieval_small.yaml`（query + 期望 doc/chunk 标注）。
+修改/新增文件（可见变化）：`tests/integration/test_retrieval_pipeline.py`、`tests/datasets/retrieval_small.yaml`（query + 期望 terms 标注）、`src/libs/providers/embedding/bow_embedder.py`（测试用可运行 embedder）。
 
 实现函数（最小集合）：
 
-* `run_query(strategy_config_id, query) -> {chunk_ids, citations, trace_id}`
-* `assert_hit_rate_at_k(result, expected, k) -> None`（最小指标 helper：不依赖 LLM）
+* `run_query(strategy_id, query) -> {chunk_ids, trace_id}`（D-9：仅检索回归，不做生成）
+* `hit_rate_at_k / mrr / ndcg_at_k`（最小指标 helper：不依赖 LLM）
 
 验收标准：
 
@@ -5719,7 +5719,7 @@ B) Dashboard（Web）
 | D-6 | Rerank（可选）+ 回退 | 完成 | 2026-02-27 | `RerankStage.run`、`warn.rerank_fallback`、可禁用 |
 | D-7 | Context 组装：回读 chunk + citations + asset_ids | 完成 | 2026-02-27 | `ContextBuildStage.run`、`SqliteStore.fetch_chunk_assets`、`context.built` event |
 | D-8 | Generate：LLM + extractive fallback | 完成 | 2026-02-27 | `GenerateStage.run`（LLM/回退）、`warn.generate_fallback` event |
-| D-9 | Retrieval 集成回归（小数据集） | 未完成 |  | `retrieval_small.yaml`、Hit/MRR 口径固定 |
+| D-9 | Retrieval 集成回归（小数据集） | 完成 | 2026-02-27 | `tests/datasets/retrieval_small.yaml` + `test_retrieval_pipeline`（Hit/MRR/NDCG 口径固定） |
 
 #### 6.4.5 阶段 E
 

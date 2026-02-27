@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from ..registry import ProviderRegistry
 from .embedding.fake_embedder import FakeEmbedder
+from .embedding.bow_embedder import BowHashEmbedder
 from .loader.markdown_loader import MarkdownLoader
 from .loader.pdf_loader import PdfLoader
 from .llm.fake_llm import FakeLLM
@@ -21,6 +22,7 @@ def register_builtin_providers(registry: ProviderRegistry) -> None:
 
     registry.register("embedder", "embedder.fake", FakeEmbedder)
     registry.register("embedder", "embedder.fake_alt", FakeEmbedder)
+    registry.register("embedder", "embedder.bow", BowHashEmbedder)
     registry.register("loader", "loader.markdown", MarkdownLoader)
     registry.register("loader", "loader.pdf", PdfLoader)
     registry.register("sectioner", "sectioner.markdown_headings", MarkdownHeadingsSectioner)
