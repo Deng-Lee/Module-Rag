@@ -31,6 +31,7 @@ def test_query_runner_spans_and_extractive_response(tmp_path: Path) -> None:
         chunk_index=1,
         chunk_text="hello world from chunk",
     )
+    sqlite.upsert_chunk_asset(chunk_id=chunk_id, asset_id="a_test_asset")
 
     # vector index stores the same embedding as the query will compute (stable top-1).
     q = "hello world from chunk"
@@ -59,11 +60,14 @@ def test_query_runner_spans_and_extractive_response(tmp_path: Path) -> None:
         "stage.retrieve_sparse",
         "stage.fusion",
         "stage.rerank",
+        "stage.context_build",
         "stage.format_response",
     ]
     assert "Install" in resp.content_md
     assert chunk_id in resp.content_md
     assert resp.sources and resp.sources[0].chunk_id == chunk_id
+    assert resp.sources[0].citation_id == "[1]"
+    assert resp.sources[0].asset_ids == ["a_test_asset"]
 
     # D-4: candidates preview events for each source are recorded.
     ev_kinds = []

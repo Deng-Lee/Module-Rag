@@ -213,6 +213,25 @@ class SqliteStore:
             )
         return out
 
+    def fetch_chunk_assets(self, chunk_ids: list[str]) -> dict[str, list[str]]:
+        if not chunk_ids:
+            return {}
+        placeholders = ",".join(["?"] * len(chunk_ids))
+        sql = f"""
+            SELECT chunk_id, asset_id
+            FROM chunk_assets
+            WHERE chunk_id IN ({placeholders})
+        """
+        with self._connect() as conn:
+            rows = conn.execute(sql, tuple(chunk_ids)).fetchall()
+
+        out: dict[str, list[str]] = {}
+        for r in rows:
+            cid = str(r["chunk_id"])
+            aid = str(r["asset_id"])
+            out.setdefault(cid, []).append(aid)
+        return out
+
 
 def new_doc_id() -> str:
     return f"doc_{uuid.uuid4().hex}"

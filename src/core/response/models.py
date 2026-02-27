@@ -14,6 +14,8 @@ class SourceRef:
     score: float
     source: str  # dense|sparse|hybrid|...
     rank: int | None = None
+    citation_id: str | None = None
+    asset_ids: list[str] | None = None
 
     doc_id: str | None = None
     version_id: str | None = None

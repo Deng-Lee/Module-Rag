@@ -123,5 +123,6 @@ def test_query_runner_on_ingested_db_returns_sources(tmp_path: Path, tmp_workdir
         "stage.retrieve_sparse",
         "stage.fusion",
         "stage.rerank",
+        "stage.context_build",
         "stage.format_response",
     ]

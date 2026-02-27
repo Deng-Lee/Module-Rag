@@ -54,4 +54,3 @@ def test_rerank_fallback_emits_warning(tmp_path: Path) -> None:
     # warning event should be present under stage.rerank span
     rerank_span = [s for s in resp.trace.spans if s.name == "stage.rerank"][0]
     assert any(e.kind == "warn.rerank_fallback" for e in rerank_span.events)
-

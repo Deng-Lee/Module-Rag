@@ -4500,7 +4500,7 @@ B) Dashboard（Web）
 验收标准：
 
 * 不引入任何外部 LLM 依赖时，`QueryRunner.run()` 也能返回可展示的 ResponseIR（例如“命中的 chunks 摘要 + 引用”）；
-* trace 至少包含 `stage.query_norm`、`stage.retrieve_dense`、`stage.format_response` spans。
+* trace 至少包含 `stage.query_norm`、`stage.retrieve_dense`、`stage.context_build`、`stage.format_response` spans。
 
 测试方法：
 
@@ -4617,13 +4617,13 @@ B) Dashboard（Web）
 
 目的：把“排名结果”变成“可返回上下文”：根据 `chunk_id` 回读事实层内容与结构化元数据，组装 citations（doc/version/section/path/page_range 等）与 `asset_ids`，供响应层与多模态按需拉取使用。
 
-修改/新增文件（可见变化）：`src/core/query_engine/stages/context_build.py`、（可选）`src/libs/interfaces/vector_store/vector_index.py`（若需要回读辅助）、`src/ingestion/stages/storage/sqlite.py`（回读 API 或单独 reader）。
+修改/新增文件（可见变化）：`src/core/query_engine/stages/context_build.py`、`src/core/query_engine/pipeline.py`（接入 `stage.context_build`）、`src/core/query_engine/stages/format_response.py`（改为消费 ContextBundle）、`src/ingestion/stages/storage/sqlite.py`（新增 `fetch_chunk_assets` 回读 API）。
 
 实现函数（最小集合）：
 
-* `ContextBuilder.build(ranked_candidates, *, k, max_tokens=None) -> ContextBundle`
+* `ContextBuildStage.run(q, runtime, params, ranked) -> ContextBundle`
 * `SqliteStore.fetch_chunks(chunk_ids) -> list[ChunkRow]`
-* `build_citations(chunk_rows) -> list[Citation]`
+* `SqliteStore.fetch_chunk_assets(chunk_ids) -> {chunk_id: asset_ids[]}`
 
 验收标准：
 
@@ -4632,8 +4632,8 @@ B) Dashboard（Web）
 
 测试方法：
 
-* 单测：对固定 chunk_rows 生成 citations 的格式化与去重；
-* 集成：从真实 SQLite 回读 chunk，断言 citations 与 section_path 对得上。
+* 单测：QueryRunner 端到端断言 `citation_id`/`asset_ids` 出现在 ResponseIR.sources 中；
+* 集成：从真实 SQLite 回读 chunk，断言 `citations_md` 与 `section_path`/`chunk_id` 对得上。
 
 8. **D-8 Generate：LLM 生成 + Extractive fallback（可插拔、可回退）**
 
@@ -5717,7 +5717,7 @@ B) Dashboard（Web）
 | D-4 | Hybrid 编排：Dense+Sparse 并行候选 | 完成 | 2026-02-27 | `retrieval.candidates` events（dense/sparse）、`_dedup_candidates`（chunk_id 去重） |
 | D-5 | Fusion：RRF 融合排序 | 完成 | 2026-02-27 | `RrfFusion.fuse`、`FusionStage.run`、`retrieval.fused` event |
 | D-6 | Rerank（可选）+ 回退 | 完成 | 2026-02-27 | `RerankStage.run`、`warn.rerank_fallback`、可禁用 |
-| D-7 | Context 组装：回读 chunk + citations + asset_ids | 未完成 |  | `SqliteStore.fetch_chunks`、`build_citations` |
+| D-7 | Context 组装：回读 chunk + citations + asset_ids | 完成 | 2026-02-27 | `ContextBuildStage.run`、`SqliteStore.fetch_chunk_assets`、`context.built` event |
 | D-8 | Generate：LLM + extractive fallback | 未完成 |  | `GenerateStage.run`、`generate_with_fallback` |
 | D-9 | Retrieval 集成回归（小数据集） | 未完成 |  | `retrieval_small.yaml`、Hit/MRR 口径固定 |
 
