@@ -8,6 +8,17 @@ from pathlib import Path
 from typing import Any
 
 
+@dataclass(frozen=True)
+class ChunkRow:
+    chunk_id: str
+    doc_id: str
+    version_id: str
+    section_id: str
+    section_path: str
+    chunk_index: int
+    chunk_text: str
+
+
 @dataclass
 class SqliteStore:
     db_path: Path
@@ -174,6 +185,33 @@ class SqliteStore:
                 "INSERT OR IGNORE INTO chunk_assets(chunk_id, asset_id) VALUES(?, ?)",
                 (chunk_id, asset_id),
             )
+
+    def fetch_chunks(self, chunk_ids: list[str]) -> list[ChunkRow]:
+        if not chunk_ids:
+            return []
+        placeholders = ",".join(["?"] * len(chunk_ids))
+        sql = f"""
+            SELECT chunk_id, doc_id, version_id, section_id, section_path, chunk_index, chunk_text
+            FROM chunks
+            WHERE chunk_id IN ({placeholders})
+        """
+        with self._connect() as conn:
+            rows = conn.execute(sql, tuple(chunk_ids)).fetchall()
+
+        out: list[ChunkRow] = []
+        for r in rows:
+            out.append(
+                ChunkRow(
+                    chunk_id=str(r["chunk_id"]),
+                    doc_id=str(r["doc_id"]),
+                    version_id=str(r["version_id"]),
+                    section_id=str(r["section_id"] or ""),
+                    section_path=str(r["section_path"] or ""),
+                    chunk_index=int(r["chunk_index"] or 0),
+                    chunk_text=str(r["chunk_text"] or ""),
+                )
+            )
+        return out
 
 
 def new_doc_id() -> str:

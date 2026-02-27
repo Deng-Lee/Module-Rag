@@ -4488,14 +4488,14 @@ B) Dashboard（Web）
 
 目的：提供可调用的在线查询入口（供 MCP tool 与后续评估复用）；先把 query_norm + dense 召回 + 格式化响应串起来，确保“可跑通可回归”。
 
-修改/新增文件（可见变化）：`src/core/runners/query.py`、`src/core/query_engine/pipeline.py`、`src/core/query_engine/stages/query_norm.py`、`src/core/query_engine/stages/retrieve_dense.py`、`src/core/query_engine/stages/format_response.py`、（如未完成）`src/core/response/*`。
+修改/新增文件（可见变化）：`src/core/runners/query.py`、`src/core/query_engine/models.py`、`src/core/query_engine/pipeline.py`、`src/core/query_engine/stages/query_norm.py`、`src/core/query_engine/stages/retrieve_dense.py`、`src/core/query_engine/stages/format_response.py`、`src/core/response/models.py`、`tests/unit/test_query_runner.py`、`tests/integration/test_query_runner_closed_loop.py`。
 
 实现函数（最小集合）：
 
 * `QueryRunner.run(query, *, strategy_config_id, top_k, filters=None) -> ResponseIR`
-* `QueryPipeline.run(query, runtime, params) -> QueryResult`
+* `QueryPipeline.run(query, runtime, params) -> ResponseIR`
 * `query_norm(query) -> query_norm`
-* `format_response(query_result) -> ResponseIR`
+* `format_response(query_result) -> ResponseIR`（D-1 为 extractive：无需 LLM）
 
 验收标准：
 
@@ -4504,8 +4504,8 @@ B) Dashboard（Web）
 
 测试方法：
 
-* 单测：pipeline stage 顺序与错误降级（例如 retrieve 为空仍能返回空答案结构）；
-* 集成：基于阶段 C 生成的测试库（SQLite+Chroma），对固定 query 返回确定的 `chunk_ids[]`（可用 golden）。
+* 单测：`tests/unit/test_query_runner.py` 覆盖 stage 顺序/spans 与空查询降级；
+* 集成：`tests/integration/test_query_runner_closed_loop.py` 先离线 ingest，再用同库 query，断言能返回 sources（使用 `chunk_text` 自举保证 FakeEmbedder 下 Top-1 稳定）。
 
 2. **D-2 Dense-only：query embedding + Chroma Top-K 召回**
 
@@ -5712,7 +5712,7 @@ B) Dashboard（Web）
 
 | 任务编号 | 任务名称 | 状态 | 完成日期 | 备注（关键实现） |
 |---|---|---|---|---|
-| D-1 | QueryRunner + QueryPipeline 骨架（无 LLM） | 未完成 |  | `QueryRunner.run`、`QueryPipeline.run`、extractive 输出 |
+| D-1 | QueryRunner + QueryPipeline 骨架（无 LLM） | 完成 | 2026-02-27 | `QueryRunner.run`（TraceContext + ResponseIR）、`QueryPipeline.run`（query_norm→dense→format）、extractive 输出 |
 | D-2 | Dense-only：Chroma Top-K 召回 | 未完成 |  | `embed_query`、`ChromaRetriever.retrieve` |
 | D-3 | Sparse-only：FTS5 Top-K 召回 | 未完成 |  | `build_fts5_query`、`Fts5Retriever.retrieve` |
 | D-4 | Hybrid 编排：Dense+Sparse 并行候选 | 未完成 |  | `retrieval.candidates` events（dense/sparse） |
