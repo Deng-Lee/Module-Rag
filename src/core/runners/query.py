@@ -100,6 +100,17 @@ def _build_query_runtime(strategy_config_id: str, *, settings_path: str | Path) 
         except Exception:
             fusion = None
 
+    # Reranker (optional).
+    reranker = None
+    try:
+        reranker_provider_id, reranker_params = strategy.resolve_provider("reranker")
+        if reranker_provider_id not in {"noop", "reranker.noop"}:
+            reranker = registry.create("reranker", reranker_provider_id, **(reranker_params or {}))
+        else:
+            reranker = None
+    except Exception:
+        reranker = None
+
     return QueryRuntime(
         embedder=embedder,
         vector_index=vector_index,
@@ -107,4 +118,5 @@ def _build_query_runtime(strategy_config_id: str, *, settings_path: str | Path) 
         sparse_retriever=sparse_retriever,
         sqlite=sqlite,
         fusion=fusion,
+        reranker=reranker,
     )

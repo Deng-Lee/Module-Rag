@@ -11,6 +11,7 @@ from .stages.fusion import FusionStage
 from .stages.query_norm import query_norm
 from .stages.retrieve_dense import DenseRetrieveStage
 from .stages.retrieve_sparse import SparseRetrieveStage
+from .stages.rerank import RerankStage
 
 
 @dataclass
@@ -26,6 +27,7 @@ class QueryPipeline:
     retrieve_dense: DenseRetrieveStage = field(default_factory=DenseRetrieveStage)
     retrieve_sparse: SparseRetrieveStage = field(default_factory=SparseRetrieveStage)
     fusion: FusionStage = field(default_factory=FusionStage)
+    rerank: RerankStage = field(default_factory=RerankStage)
     format_response: FormatResponseStage = field(default_factory=FormatResponseStage)
 
     def run(self, query: str, *, runtime: QueryRuntime, params: QueryParams) -> ResponseIR:
@@ -46,6 +48,9 @@ class QueryPipeline:
         with obs.span("stage.fusion", {"stage": "fusion"}):
             ranked = self.fusion.run(runtime=runtime, params=params, candidates_by_source=candidates_by_source)
             _emit_ranked_event(ranked, top_k=params.top_k)
+
+        with obs.span("stage.rerank", {"stage": "rerank"}):
+            ranked = self.rerank.run(q=q, runtime=runtime, params=params, ranked=ranked)
 
         with obs.span("stage.format_response", {"stage": "format_response"}):
             return self.format_response.run(q=q, candidates=ranked, runtime=runtime, trace_id=trace_id)

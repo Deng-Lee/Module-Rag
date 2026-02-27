@@ -4595,13 +4595,13 @@ B) Dashboard（Web）
 
 目的：把 rerank 作为可插拔后处理：启用时改善排序；失败/禁用时自动回退到 fusion 排序，并记录 warning（不影响回答返回）。
 
-修改/新增文件（可见变化）：`src/libs/interfaces/reranker/reranker.py`、`src/libs/providers/reranker/noop.py`、（可选）`src/libs/providers/reranker/fake_reranker.py`、`src/core/query_engine/stages/rerank.py`。
+修改/新增文件（可见变化）：`src/core/query_engine/stages/rerank.py`、`src/core/query_engine/pipeline.py`、`src/core/query_engine/models.py`、`src/core/runners/query.py`、`tests/unit/test_rerank_fallback.py`。
 
 实现函数（最小集合）：
 
-* `Reranker.rerank(query, ranked_candidates, k_out) -> list[RankedCandidate]`
+* `Reranker.rerank(query, ranked_candidates) -> list[RankedCandidate]`
 * `NoopReranker.rerank(...) -> ranked_candidates`
-* `rerank_with_fallback(...) -> (reranked, warning?)`
+* `RerankStage.run(...) -> ranked_candidates`（失败回退 + 记录 warning event）
 
 验收标准：
 
@@ -5716,7 +5716,7 @@ B) Dashboard（Web）
 | D-3 | Sparse-only：FTS5 Top-K 召回 | 完成 | 2026-02-27 | `build_fts5_query`、`Fts5Retriever.retrieve`、`SparseRetrieveStage` |
 | D-4 | Hybrid 编排：Dense+Sparse 并行候选 | 完成 | 2026-02-27 | `retrieval.candidates` events（dense/sparse）、`_dedup_candidates`（chunk_id 去重） |
 | D-5 | Fusion：RRF 融合排序 | 完成 | 2026-02-27 | `RrfFusion.fuse`、`FusionStage.run`、`retrieval.fused` event |
-| D-6 | Rerank（可选）+ 回退 | 未完成 |  | `rerank_with_fallback`、异常降级 |
+| D-6 | Rerank（可选）+ 回退 | 完成 | 2026-02-27 | `RerankStage.run`、`warn.rerank_fallback`、可禁用 |
 | D-7 | Context 组装：回读 chunk + citations + asset_ids | 未完成 |  | `SqliteStore.fetch_chunks`、`build_citations` |
 | D-8 | Generate：LLM + extractive fallback | 未完成 |  | `GenerateStage.run`、`generate_with_fallback` |
 | D-9 | Retrieval 集成回归（小数据集） | 未完成 |  | `retrieval_small.yaml`、Hit/MRR 口径固定 |

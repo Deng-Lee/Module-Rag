@@ -110,6 +110,7 @@ def test_query_runner_on_ingested_db_returns_sources(tmp_path: Path, tmp_workdir
             sparse_retriever=Fts5Retriever(db_path=str(sqlite_dir / "fts.sqlite")),
             sqlite=SqliteStore(db_path=sqlite_dir / "app.sqlite"),
             fusion=RrfFusion(k=60),
+            reranker=None,
         )
 
     resp = QueryRunner(runtime_builder=build_rt).run(chunk_text, strategy_config_id="local.default", top_k=3)
@@ -121,5 +122,6 @@ def test_query_runner_on_ingested_db_returns_sources(tmp_path: Path, tmp_workdir
         "stage.retrieve_dense",
         "stage.retrieve_sparse",
         "stage.fusion",
+        "stage.rerank",
         "stage.format_response",
     ]

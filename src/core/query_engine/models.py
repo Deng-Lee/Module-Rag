@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ...libs.interfaces.embedding import Embedder
+from ...libs.interfaces.reranker import Reranker
 from ...libs.interfaces.vector_store import Candidate, Fusion, Retriever, VectorIndex
 from ...ingestion.stages.storage.sqlite import SqliteStore
 
@@ -39,3 +40,4 @@ class QueryRuntime:
     sqlite: SqliteStore
     sparse_retriever: Retriever | None = None
     fusion: Fusion | None = None
+    reranker: Reranker | None = None
