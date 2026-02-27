@@ -4462,11 +4462,11 @@ B) Dashboard（Web）
 
 目的：固化“离线摄取闭环”的端到端回归测试，作为后续 Retrieval/MCP/评估的共同数据基线。
 
-修改/新增文件（可见变化）：`tests/integration/test_ingest_pipeline.py`（或同类）、`tests/fixtures/*`（样本文档：含 headings/图片/引用）、（可选）`tests/integration/test_sparse_smoke.py`。
+修改/新增文件（可见变化）：`tests/integration/test_ingest_pipeline.py`、`tests/fixtures/docs/sample.md`、`tests/fixtures/assets/sample.svg`。
 
 实现函数（最小集合）：
 
-* `run_ingest_fixture(fixture_name, strategy_config_id) -> {doc_id, version_id, trace_id}`
+* `run_ingest_fixture(input_path, policy, strategy_config_id) -> {doc_id, version_id, trace_id}`
 
 验收标准：
 
@@ -4478,6 +4478,7 @@ B) Dashboard（Web）
 
 * `pytest -q -m integration`（或直接跑该文件）；
 * 断言 ingest_result（counts、warnings）与落盘/落库一致。
+* 固化用例包含两类幂等策略：`policy=skip`（短路不重跑）与 `policy=new_version`（同 hash 创建新 version 记录）。
 
 #### 6.2.4 阶段 D：Retrieval（递进：Dense-only → Sparse-only → Hybrid → Fusion(RRF) → 可选 Rerank）（≈1h/增量）
 
@@ -5705,7 +5706,7 @@ B) Dashboard（Web）
 | C-9 | Encoding：dense fake + sparse MVP | 完成 | 2026-02-25 | dense vectors + `{chunk_id,text}` 视图 |
 | C-10 | Embedding Cache：向量复用 | 完成 | 2026-02-25 | `EmbeddingCache.get/put`、cache key 对齐 canonical |
 | C-11 | Upsert：FS + SQLite + Chroma + FTS5 | 完成 | 2026-02-25 | `UpsertStage.run`（md/SQLite/vector/FTS5 同步落地）、`Fts5Store.query` 冒烟、`vector.chroma_lite` 持久化 |
-| C-12 | Ingestion E2E 回归（含 sparse 可用性） | 未完成 |  | `test_ingest_pipeline` + sparse smoke |
+| C-12 | Ingestion E2E 回归（含 sparse 可用性） | 完成 | 2026-02-27 | `tests/integration/test_ingest_pipeline.py`（skip/new_version 幂等 + FTS5 可命中） |
 
 #### 6.4.4 阶段 D
 
