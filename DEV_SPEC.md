@@ -4686,7 +4686,7 @@ B) Dashboard（Web）
 
 目的：实现 stdio transport + JSON-RPC 编解码与错误包裹，保证“发一条 JSON-RPC 请求 → 收到一条 JSON-RPC 响应”的通信闭环。
 
-修改/新增文件（可见变化）：`src/mcp_server/jsonrpc/codec.py`、`src/mcp_server/jsonrpc/stdio_transport.py`。
+修改/新增文件（可见变化）：`src/mcp_server/jsonrpc/models.py`、`src/mcp_server/jsonrpc/codec.py`、`src/mcp_server/jsonrpc/stdio_transport.py`、`tests/unit/test_jsonrpc_codec.py`、`tests/integration/test_jsonrpc_stdio_transport.py`。
 
 实现函数（最小集合）：
 
@@ -5725,7 +5725,7 @@ B) Dashboard（Web）
 
 | 任务编号 | 任务名称 | 状态 | 完成日期 | 备注（关键实现） |
 |---|---|---|---|---|
-| E-1 | stdio JSON-RPC 传输与编解码 | 未完成 |  | `decode_request/encode_response/encode_error` |
+| E-1 | stdio JSON-RPC 传输与编解码 | 完成 | 2026-02-27 | `decode_request/encode_response/encode_error`、`StdioTransport.serve` |
 | E-2 | Dispatcher：method 路由 | 未完成 |  | `Dispatcher.register/handle` |
 | E-3 | MCP 协议语义层：tools/list + tools/call | 未完成 |  | `McpProtocol.handle_tools_list/tools_call` |
 | E-4 | Schema + L0/L1/L2 Envelope | 未完成 |  | `validate_tool_args`、`build_response_envelope`、`degrade` |
