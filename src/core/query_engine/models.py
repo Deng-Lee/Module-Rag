@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ...libs.interfaces.embedding import Embedder
-from ...libs.interfaces.vector_store import Candidate, VectorIndex
+from ...libs.interfaces.vector_store import Candidate, Retriever, VectorIndex
 from ...ingestion.stages.storage.sqlite import SqliteStore
 
 
@@ -35,5 +35,5 @@ class QueryState:
 class QueryRuntime:
     embedder: Embedder
     vector_index: VectorIndex
+    retriever: Retriever
     sqlite: SqliteStore
-

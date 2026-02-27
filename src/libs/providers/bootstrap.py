@@ -11,6 +11,7 @@ from .splitter.recursive_chunker import RecursiveCharChunkerWithinSection
 from .splitter.simple_chunker import SimpleCharChunkerWithinSection
 from .vector_store.in_memory import InMemoryVectorIndex
 from .vector_store.chroma_lite import ChromaLiteVectorIndex
+from .vector_store.chroma_retriever import ChromaDenseRetriever
 
 
 def register_builtin_providers(registry: ProviderRegistry) -> None:
@@ -26,4 +27,5 @@ def register_builtin_providers(registry: ProviderRegistry) -> None:
     registry.register("llm", "llm.fake", FakeLLM)
     registry.register("vector_index", "vector.in_memory", InMemoryVectorIndex)
     registry.register("vector_index", "vector.chroma_lite", ChromaLiteVectorIndex)
+    registry.register("retriever", "retriever.chroma_dense", ChromaDenseRetriever)
     registry.register("reranker", "reranker.noop", NoopReranker)

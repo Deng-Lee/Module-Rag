@@ -61,7 +61,19 @@ def _build_query_runtime(strategy_config_id: str, *, settings_path: str | Path) 
     vec_provider_id, vec_params = strategy.resolve_provider("vector_index")
     vector_index = registry.create("vector_index", vec_provider_id, vec_params)
 
+    # Dense retriever: injected with embedder + vector_index.
+    try:
+        retriever_provider_id, retriever_params = strategy.resolve_provider("retriever")
+    except Exception:
+        retriever_provider_id, retriever_params = "retriever.chroma_dense", {}
+    retriever = registry.create(
+        "retriever",
+        retriever_provider_id,
+        embedder=embedder,
+        vector_index=vector_index,
+        **retriever_params,
+    )
+
     sqlite = SqliteStore(db_path=settings.paths.sqlite_dir / "app.sqlite")
 
-    return QueryRuntime(embedder=embedder, vector_index=vector_index, sqlite=sqlite)
-
+    return QueryRuntime(embedder=embedder, vector_index=vector_index, retriever=retriever, sqlite=sqlite)

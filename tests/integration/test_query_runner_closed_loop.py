@@ -25,6 +25,7 @@ from src.libs.providers.loader.markdown_loader import MarkdownLoader
 from src.libs.providers.splitter.markdown_headings import MarkdownHeadingsSectioner
 from src.libs.providers.splitter.recursive_chunker import RecursiveCharChunkerWithinSection
 from src.libs.providers.vector_store.chroma_lite import ChromaLiteVectorIndex
+from src.libs.providers.vector_store.chroma_retriever import ChromaDenseRetriever
 
 
 @pytest.mark.integration
@@ -98,9 +99,12 @@ def test_query_runner_on_ingested_db_returns_sources(tmp_path: Path, tmp_workdir
     chunk_text = str(row["chunk_text"])
 
     def build_rt(_: str) -> QueryRuntime:
+        vector_idx = ChromaLiteVectorIndex(db_path=str(chroma_dir / "chroma_lite.sqlite"))
+        embed = embedder
         return QueryRuntime(
-            embedder=embedder,
-            vector_index=ChromaLiteVectorIndex(db_path=str(chroma_dir / "chroma_lite.sqlite")),
+            embedder=embed,
+            vector_index=vector_idx,
+            retriever=ChromaDenseRetriever(embedder=embed, vector_index=vector_idx),
             sqlite=SqliteStore(db_path=sqlite_dir / "app.sqlite"),
         )
 
@@ -113,4 +117,3 @@ def test_query_runner_on_ingested_db_returns_sources(tmp_path: Path, tmp_workdir
         "stage.retrieve_dense",
         "stage.format_response",
     ]
-

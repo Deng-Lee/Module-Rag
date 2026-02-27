@@ -8,6 +8,7 @@ from src.libs.interfaces.vector_store import VectorItem
 from src.libs.providers.embedding.fake_embedder import FakeEmbedder
 from src.libs.providers.vector_store.in_memory import InMemoryVectorIndex
 from src.core.query_engine.models import QueryRuntime
+from src.libs.providers.vector_store.chroma_retriever import ChromaDenseRetriever
 
 
 def test_query_runner_spans_and_extractive_response(tmp_path: Path) -> None:
@@ -37,7 +38,12 @@ def test_query_runner_spans_and_extractive_response(tmp_path: Path) -> None:
     vec.upsert([VectorItem(chunk_id=chunk_id, vector=q_vec, metadata={"doc_id": doc_id, "version_id": version_id})])
 
     def build_rt(_: str) -> QueryRuntime:
-        return QueryRuntime(embedder=embedder, vector_index=vec, sqlite=sqlite)
+        return QueryRuntime(
+            embedder=embedder,
+            vector_index=vec,
+            retriever=ChromaDenseRetriever(embedder=embedder, vector_index=vec),
+            sqlite=sqlite,
+        )
 
     runner = QueryRunner(runtime_builder=build_rt)
     resp = runner.run(q, strategy_config_id="local.default", top_k=3)
@@ -55,7 +61,10 @@ def test_query_runner_spans_and_extractive_response(tmp_path: Path) -> None:
 
 
 def test_query_runner_empty_query() -> None:
-    runner = QueryRunner(runtime_builder=lambda _: QueryRuntime(embedder=FakeEmbedder(), vector_index=InMemoryVectorIndex(), sqlite=SqliteStore(db_path=Path(":memory:"))))  # type: ignore[arg-type]
+    embedder = FakeEmbedder()
+    vec = InMemoryVectorIndex()
+    sqlite = SqliteStore(db_path=Path(":memory:"))  # type: ignore[arg-type]
+    retriever = ChromaDenseRetriever(embedder=embedder, vector_index=vec)
+    runner = QueryRunner(runtime_builder=lambda _: QueryRuntime(embedder=embedder, vector_index=vec, retriever=retriever, sqlite=sqlite))  # type: ignore[arg-type]
     resp = runner.run("   ", strategy_config_id="local.default", top_k=3)
     assert "空查询" in resp.content_md
-

@@ -22,5 +22,9 @@ providers:
       name: fake-llm
   vector_index:
     provider_id: vector.in_memory
+  retriever:
+    provider_id: retriever.chroma_dense
+    params:
+      text_norm_profile_id: default
   reranker:
     provider_id: reranker.noop

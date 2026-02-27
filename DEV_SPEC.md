@@ -4511,13 +4511,12 @@ B) Dashboard（Web）
 
 目的：完成“稠密召回”的端到端：query → embedder → Chroma query → candidates（含分数）。
 
-修改/新增文件（可见变化）：`src/libs/interfaces/embedding/embedder.py`、`src/libs/interfaces/vector_store/retriever.py`、`src/libs/providers/vector_store/chroma_retriever.py`（或同类）、`src/core/query_engine/stages/retrieve_dense.py`。
+修改/新增文件（可见变化）：`src/libs/providers/vector_store/chroma_retriever.py`、`src/libs/providers/bootstrap.py`、`config/strategies/local.default.yaml`、`config/strategies/local.alt.yaml`、`src/core/runners/query.py`、`src/core/query_engine/models.py`、`src/core/query_engine/stages/retrieve_dense.py`、`tests/unit/test_chroma_dense_retriever.py`。
 
 实现函数（最小集合）：
 
-* `Embedder.embed_query(text: str) -> vector`（或复用 `embed_texts([text])[0]`）
-* `DenseRetriever.retrieve(query_vector, top_k, filters=None) -> list[Candidate]`
-* `ChromaRetriever.retrieve(...) -> list[Candidate]`
+* `ChromaDenseRetriever.retrieve(query_text, top_k) -> list[Candidate]`（内部：canonical + embed + VectorIndex.query）
+* `DenseRetrieveStage.run(...) -> candidates`（改为调用 `runtime.retriever.retrieve(...)`）
 
 验收标准：
 
@@ -5713,7 +5712,7 @@ B) Dashboard（Web）
 | 任务编号 | 任务名称 | 状态 | 完成日期 | 备注（关键实现） |
 |---|---|---|---|---|
 | D-1 | QueryRunner + QueryPipeline 骨架（无 LLM） | 完成 | 2026-02-27 | `QueryRunner.run`（TraceContext + ResponseIR）、`QueryPipeline.run`（query_norm→dense→format）、extractive 输出 |
-| D-2 | Dense-only：Chroma Top-K 召回 | 未完成 |  | `embed_query`、`ChromaRetriever.retrieve` |
+| D-2 | Dense-only：Chroma Top-K 召回 | 完成 | 2026-02-27 | `ChromaDenseRetriever.retrieve`（embed+query）、`retrieve_dense` 改为 retriever provider 驱动 |
 | D-3 | Sparse-only：FTS5 Top-K 召回 | 未完成 |  | `build_fts5_query`、`Fts5Retriever.retrieve` |
 | D-4 | Hybrid 编排：Dense+Sparse 并行候选 | 未完成 |  | `retrieval.candidates` events（dense/sparse） |
 | D-5 | Fusion：RRF 融合排序 | 未完成 |  | `RrfFusion.fuse`、按 chunk_id 去重 |
