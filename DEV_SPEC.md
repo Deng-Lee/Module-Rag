@@ -4639,13 +4639,13 @@ B) Dashboard（Web）
 
 目的：补齐在线查询的“生成式回答”能力：默认可用 FakeLLM 或真实 LLM provider；当 LLM 不可用/超时/失败时，自动回退到 extractive（引用片段拼接）确保 tool 仍可返回可读结果。
 
-修改/新增文件（可见变化）：`src/core/query_engine/stages/generate.py`、`src/libs/interfaces/llm/llm.py`（若需补齐）、`src/libs/providers/llm/fake_llm.py`、（可选）`src/libs/providers/llm/openai_compatible.py`、`src/core/query_engine/stages/format_response.py`（接入 generate 输出）。
+修改/新增文件（可见变化）：`src/core/query_engine/stages/generate.py`、`src/core/query_engine/pipeline.py`（接入 `stage.generate`）、`src/core/query_engine/models.py`（注入 `llm`）、`src/core/runners/query.py`（装配 `make_llm`）、`src/core/query_engine/stages/format_response.py`（接入 answer + citations）、`tests/unit/test_generate_stage.py`。
 
 实现函数（最小集合）：
 
-* `GenerateStage.run(query_norm, context_bundle, llm, mode="rag") -> GenerationResult`
+* `GenerateStage.run(q, bundle, runtime, params) -> GenerationResult`
 * `LLM.generate(mode, messages, **kwargs) -> LLMResult`
-* `generate_with_fallback(...) -> (generation_result, warning?)`
+* `extractive_fallback(bundle) -> answer_md`（LLM 不可用/失败时）
 
 验收标准：
 
@@ -5718,7 +5718,7 @@ B) Dashboard（Web）
 | D-5 | Fusion：RRF 融合排序 | 完成 | 2026-02-27 | `RrfFusion.fuse`、`FusionStage.run`、`retrieval.fused` event |
 | D-6 | Rerank（可选）+ 回退 | 完成 | 2026-02-27 | `RerankStage.run`、`warn.rerank_fallback`、可禁用 |
 | D-7 | Context 组装：回读 chunk + citations + asset_ids | 完成 | 2026-02-27 | `ContextBuildStage.run`、`SqliteStore.fetch_chunk_assets`、`context.built` event |
-| D-8 | Generate：LLM + extractive fallback | 未完成 |  | `GenerateStage.run`、`generate_with_fallback` |
+| D-8 | Generate：LLM + extractive fallback | 完成 | 2026-02-27 | `GenerateStage.run`（LLM/回退）、`warn.generate_fallback` event |
 | D-9 | Retrieval 集成回归（小数据集） | 未完成 |  | `retrieval_small.yaml`、Hit/MRR 口径固定 |
 
 #### 6.4.5 阶段 E

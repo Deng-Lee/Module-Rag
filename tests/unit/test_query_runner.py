@@ -9,6 +9,7 @@ from src.libs.providers.embedding.fake_embedder import FakeEmbedder
 from src.libs.providers.vector_store.in_memory import InMemoryVectorIndex
 from src.core.query_engine.models import QueryRuntime
 from src.libs.providers.vector_store.chroma_retriever import ChromaDenseRetriever
+from src.libs.providers.llm.fake_llm import FakeLLM
 
 
 def test_query_runner_spans_and_extractive_response(tmp_path: Path) -> None:
@@ -47,6 +48,7 @@ def test_query_runner_spans_and_extractive_response(tmp_path: Path) -> None:
             sqlite=sqlite,
             fusion=None,
             reranker=None,
+            llm=FakeLLM(name="fake-llm"),
         )
 
     runner = QueryRunner(runtime_builder=build_rt)
@@ -61,6 +63,7 @@ def test_query_runner_spans_and_extractive_response(tmp_path: Path) -> None:
         "stage.fusion",
         "stage.rerank",
         "stage.context_build",
+        "stage.generate",
         "stage.format_response",
     ]
     assert "Install" in resp.content_md
@@ -91,6 +94,7 @@ def test_query_runner_empty_query() -> None:
             sqlite=sqlite,
             fusion=None,
             reranker=None,
+            llm=None,
         )
     )  # type: ignore[arg-type]
     resp = runner.run("   ", strategy_config_id="local.default", top_k=3)

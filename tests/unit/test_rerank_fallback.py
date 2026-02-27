@@ -9,6 +9,7 @@ from src.libs.interfaces.vector_store import RankedCandidate
 from src.libs.providers.embedding.fake_embedder import FakeEmbedder
 from src.libs.providers.vector_store.chroma_retriever import ChromaDenseRetriever
 from src.libs.providers.vector_store.in_memory import InMemoryVectorIndex
+from src.libs.providers.llm.fake_llm import FakeLLM
 
 
 class _BoomReranker:
@@ -47,6 +48,7 @@ def test_rerank_fallback_emits_warning(tmp_path: Path) -> None:
             sparse_retriever=None,
             fusion=None,
             reranker=_BoomReranker(),
+            llm=FakeLLM(name="fake-llm"),
         )
 
     resp = QueryRunner(runtime_builder=build_rt).run("hello", strategy_config_id="local.default", top_k=3)

@@ -13,6 +13,7 @@ from .stages.retrieve_dense import DenseRetrieveStage
 from .stages.retrieve_sparse import SparseRetrieveStage
 from .stages.rerank import RerankStage
 from .stages.context_build import ContextBuildStage
+from .stages.generate import GenerateStage
 
 
 @dataclass
@@ -30,6 +31,7 @@ class QueryPipeline:
     fusion: FusionStage = field(default_factory=FusionStage)
     rerank: RerankStage = field(default_factory=RerankStage)
     context_build: ContextBuildStage = field(default_factory=ContextBuildStage)
+    generate: GenerateStage = field(default_factory=GenerateStage)
     format_response: FormatResponseStage = field(default_factory=FormatResponseStage)
 
     def run(self, query: str, *, runtime: QueryRuntime, params: QueryParams) -> ResponseIR:
@@ -57,8 +59,11 @@ class QueryPipeline:
         with obs.span("stage.context_build", {"stage": "context_build"}):
             bundle = self.context_build.run(q=q, runtime=runtime, params=params, ranked=ranked)
 
+        with obs.span("stage.generate", {"stage": "generate"}):
+            gen = self.generate.run(q=q, bundle=bundle, runtime=runtime, params=params)
+
         with obs.span("stage.format_response", {"stage": "format_response"}):
-            return self.format_response.run(q=q, bundle=bundle, trace_id=trace_id)
+            return self.format_response.run(q=q, bundle=bundle, gen=gen, trace_id=trace_id)
 
 
 def _emit_candidates_event(source: str, candidates: list, *, top_k: int) -> None:

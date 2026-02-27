@@ -8,7 +8,7 @@ from ..query_engine import QueryParams, QueryPipeline, QueryRuntime
 from ..response import ResponseIR
 from ..strategy import StrategyLoader, load_settings
 from ...ingestion.stages.storage.sqlite import SqliteStore
-from ...libs.factories import make_embedding
+from ...libs.factories import make_embedding, make_llm
 from ...libs.providers import register_builtin_providers
 from ...libs.registry import ProviderRegistry
 from ...observability.trace.context import TraceContext
@@ -57,6 +57,7 @@ def _build_query_runtime(strategy_config_id: str, *, settings_path: str | Path) 
 
     cfg = strategy.to_factory_cfg()
     embedder, _ = make_embedding(cfg, registry)
+    llm = make_llm(cfg, registry)
 
     vec_provider_id, vec_params = strategy.resolve_provider("vector_index")
     vector_index = registry.create("vector_index", vec_provider_id, vec_params)
@@ -119,4 +120,5 @@ def _build_query_runtime(strategy_config_id: str, *, settings_path: str | Path) 
         sqlite=sqlite,
         fusion=fusion,
         reranker=reranker,
+        llm=llm,
     )

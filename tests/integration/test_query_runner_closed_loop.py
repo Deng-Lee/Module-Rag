@@ -28,6 +28,7 @@ from src.libs.providers.vector_store.chroma_lite import ChromaLiteVectorIndex
 from src.libs.providers.vector_store.chroma_retriever import ChromaDenseRetriever
 from src.libs.providers.vector_store.fts5_retriever import Fts5Retriever
 from src.libs.providers.vector_store.rrf_fusion import RrfFusion
+from src.libs.providers.llm.fake_llm import FakeLLM
 
 
 @pytest.mark.integration
@@ -111,6 +112,7 @@ def test_query_runner_on_ingested_db_returns_sources(tmp_path: Path, tmp_workdir
             sqlite=SqliteStore(db_path=sqlite_dir / "app.sqlite"),
             fusion=RrfFusion(k=60),
             reranker=None,
+            llm=FakeLLM(name="fake-llm"),
         )
 
     resp = QueryRunner(runtime_builder=build_rt).run(chunk_text, strategy_config_id="local.default", top_k=3)
@@ -124,5 +126,6 @@ def test_query_runner_on_ingested_db_returns_sources(tmp_path: Path, tmp_workdir
         "stage.fusion",
         "stage.rerank",
         "stage.context_build",
+        "stage.generate",
         "stage.format_response",
     ]

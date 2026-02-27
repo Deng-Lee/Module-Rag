@@ -5,13 +5,17 @@ from dataclasses import dataclass
 from ...response import ResponseIR, SourceRef
 from ..models import QueryIR
 from .context_build import ContextBundle
+from .generate import GenerationResult
 
 
 @dataclass
 class FormatResponseStage:
-    """Build an extractive markdown answer (no LLM)."""
+    """Build the final response markdown.
 
-    def run(self, *, q: QueryIR, bundle: ContextBundle, trace_id: str) -> ResponseIR:
+    D-8 scope: render LLM answer when available; otherwise show extractive fallback.
+    """
+
+    def run(self, *, q: QueryIR, bundle: ContextBundle, gen: GenerationResult, trace_id: str) -> ResponseIR:
         if not q.query_norm.strip():
             return ResponseIR(trace_id=trace_id, content_md="（空查询）请提供一个问题。", sources=[])
 
@@ -20,7 +24,12 @@ class FormatResponseStage:
 
         sources: list[SourceRef] = []
         lines: list[str] = []
-        lines.append("以下为**召回片段（extraction）**，用于定位原文：\n")
+
+        lines.append("**Answer**\n")
+        lines.append(gen.answer_md.strip() + "\n")
+
+        lines.append("---\n")
+        lines.append("**Retrieved Chunks**\n")
 
         for idx, c in enumerate(bundle.chunks, start=1):
             sources.append(

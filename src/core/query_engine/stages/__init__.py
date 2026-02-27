@@ -4,6 +4,7 @@ from .retrieve_sparse import SparseRetrieveStage
 from .fusion import FusionStage
 from .rerank import RerankStage
 from .context_build import ContextBuildStage, ContextBundle, ContextChunk
+from .generate import GenerateStage, GenerationResult
 from .format_response import FormatResponseStage
 
 __all__ = [
@@ -15,5 +16,7 @@ __all__ = [
     "ContextBuildStage",
     "ContextBundle",
     "ContextChunk",
+    "GenerateStage",
+    "GenerationResult",
     "FormatResponseStage",
 ]
