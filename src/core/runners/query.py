@@ -89,10 +89,22 @@ def _build_query_runtime(strategy_config_id: str, *, settings_path: str | Path) 
 
     sqlite = SqliteStore(db_path=settings.paths.sqlite_dir / "app.sqlite")
 
+    # Fusion (optional; default to RRF if available).
+    fusion = None
+    try:
+        fusion_provider_id, fusion_params = strategy.resolve_provider("fusion")
+        fusion = registry.create("fusion", fusion_provider_id, **(fusion_params or {}))
+    except Exception:
+        try:
+            fusion = registry.create("fusion", "fusion.rrf")
+        except Exception:
+            fusion = None
+
     return QueryRuntime(
         embedder=embedder,
         vector_index=vector_index,
         retriever=retriever,
         sparse_retriever=sparse_retriever,
         sqlite=sqlite,
+        fusion=fusion,
     )

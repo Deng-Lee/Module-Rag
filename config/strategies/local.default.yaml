@@ -28,5 +28,9 @@ providers:
       text_norm_profile_id: default
   sparse_retriever:
     provider_id: sparse_retriever.fts5
+  fusion:
+    provider_id: fusion.rrf
+    params:
+      k: 60
   reranker:
     provider_id: reranker.noop

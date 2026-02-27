@@ -20,6 +20,7 @@ def test_sparse_retrieve_stage_disabled_returns_empty() -> None:
         retriever=dense,
         sqlite=SqliteStore(db_path=Path("cache/test_sparse_retrieve.sqlite")),
         sparse_retriever=None,
+        fusion=None,
     )
     q = QueryIR(query_raw="hi", query_norm="hi")
     out = SparseRetrieveStage().run(q, rt, QueryParams(top_k=3))

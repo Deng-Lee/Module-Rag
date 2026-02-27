@@ -27,6 +27,7 @@ from src.libs.providers.splitter.recursive_chunker import RecursiveCharChunkerWi
 from src.libs.providers.vector_store.chroma_lite import ChromaLiteVectorIndex
 from src.libs.providers.vector_store.chroma_retriever import ChromaDenseRetriever
 from src.libs.providers.vector_store.fts5_retriever import Fts5Retriever
+from src.libs.providers.vector_store.rrf_fusion import RrfFusion
 
 
 @pytest.mark.integration
@@ -108,6 +109,7 @@ def test_query_runner_on_ingested_db_returns_sources(tmp_path: Path, tmp_workdir
             retriever=ChromaDenseRetriever(embedder=embed, vector_index=vector_idx),
             sparse_retriever=Fts5Retriever(db_path=str(sqlite_dir / "fts.sqlite")),
             sqlite=SqliteStore(db_path=sqlite_dir / "app.sqlite"),
+            fusion=RrfFusion(k=60),
         )
 
     resp = QueryRunner(runtime_builder=build_rt).run(chunk_text, strategy_config_id="local.default", top_k=3)
@@ -118,5 +120,6 @@ def test_query_runner_on_ingested_db_returns_sources(tmp_path: Path, tmp_workdir
         "stage.query_norm",
         "stage.retrieve_dense",
         "stage.retrieve_sparse",
+        "stage.fusion",
         "stage.format_response",
     ]

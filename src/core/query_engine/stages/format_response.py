@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ...response import ResponseIR, SourceRef
-from ....libs.interfaces.vector_store import Candidate
+from ....libs.interfaces.vector_store import RankedCandidate
 from ..models import QueryIR, QueryRuntime
 
 
@@ -13,7 +13,7 @@ class FormatResponseStage:
 
     max_chars_per_chunk: int = 320
 
-    def run(self, *, q: QueryIR, candidates: list[Candidate], runtime: QueryRuntime, trace_id: str) -> ResponseIR:
+    def run(self, *, q: QueryIR, candidates: list[RankedCandidate], runtime: QueryRuntime, trace_id: str) -> ResponseIR:
         if not q.query_norm.strip():
             return ResponseIR(trace_id=trace_id, content_md="（空查询）请提供一个问题。", sources=[])
 
@@ -41,6 +41,7 @@ class FormatResponseStage:
                     chunk_id=cand.chunk_id,
                     score=float(cand.score),
                     source=cand.source,
+                    rank=int(getattr(cand, "rank", idx) or idx),
                     doc_id=row.doc_id if row else None,
                     version_id=row.version_id if row else None,
                     section_path=row.section_path if row else None,
@@ -49,7 +50,9 @@ class FormatResponseStage:
             )
 
             title = row.section_path if (row and row.section_path) else "(unknown section)"
-            lines.append(f"{idx}. `{title}` (score={cand.score:.4f}, chunk_id={cand.chunk_id})")
+            lines.append(
+                f"{idx}. `{title}` (score={cand.score:.4f}, chunk_id={cand.chunk_id})"
+            )
             if excerpt:
                 lines.append(f"   - {excerpt}")
 

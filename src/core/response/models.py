@@ -13,6 +13,7 @@ class SourceRef:
     chunk_id: str
     score: float
     source: str  # dense|sparse|hybrid|...
+    rank: int | None = None
 
     doc_id: str | None = None
     version_id: str | None = None
@@ -31,4 +32,3 @@ class ResponseIR:
 
     # For tests/debug; MCP tool can choose to omit this from client response.
     trace: TraceEnvelope | None = None
-

@@ -13,6 +13,7 @@ from .vector_store.in_memory import InMemoryVectorIndex
 from .vector_store.chroma_lite import ChromaLiteVectorIndex
 from .vector_store.chroma_retriever import ChromaDenseRetriever
 from .vector_store.fts5_retriever import Fts5Retriever
+from .vector_store.rrf_fusion import RrfFusion
 
 
 def register_builtin_providers(registry: ProviderRegistry) -> None:
@@ -30,4 +31,5 @@ def register_builtin_providers(registry: ProviderRegistry) -> None:
     registry.register("vector_index", "vector.chroma_lite", ChromaLiteVectorIndex)
     registry.register("retriever", "retriever.chroma_dense", ChromaDenseRetriever)
     registry.register("sparse_retriever", "sparse_retriever.fts5", Fts5Retriever)
+    registry.register("fusion", "fusion.rrf", RrfFusion)
     registry.register("reranker", "reranker.noop", NoopReranker)

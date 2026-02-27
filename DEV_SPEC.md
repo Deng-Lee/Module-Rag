@@ -4574,12 +4574,12 @@ B) Dashboard（Web）
 
 目的：实现可插拔的融合策略（默认 RRF），把多路候选合并为一个 `ranked_candidates[]`，用于后续 rerank/context_build。
 
-修改/新增文件（可见变化）：`src/libs/interfaces/vector_store/fusion.py`、`src/libs/providers/vector_store/rrf_fusion.py`（或同类）、`src/core/query_engine/stages/fusion.py`。
+修改/新增文件（可见变化）：`src/libs/providers/vector_store/rrf_fusion.py`、`src/libs/providers/bootstrap.py`、`config/strategies/local.default.yaml`、`config/strategies/local.alt.yaml`、`src/core/query_engine/stages/fusion.py`、`src/core/query_engine/pipeline.py`、`src/core/query_engine/models.py`、`src/core/runners/query.py`、`tests/unit/test_rrf_fusion.py`。
 
 实现函数（最小集合）：
 
-* `RrfFusion.fuse(candidates_by_source, k_out) -> list[RankedCandidate]`
-* `dedup_by_chunk_id(candidates) -> candidates`（融合前去重规则）
+* `RrfFusion.fuse(candidates_by_source) -> list[RankedCandidate]`
+* `FusionStage.run(...) -> list[RankedCandidate]`（融合/降级/截断）
 
 验收标准：
 
@@ -5715,7 +5715,7 @@ B) Dashboard（Web）
 | D-2 | Dense-only：Chroma Top-K 召回 | 完成 | 2026-02-27 | `ChromaDenseRetriever.retrieve`（embed+query）、`retrieve_dense` 改为 retriever provider 驱动 |
 | D-3 | Sparse-only：FTS5 Top-K 召回 | 完成 | 2026-02-27 | `build_fts5_query`、`Fts5Retriever.retrieve`、`SparseRetrieveStage` |
 | D-4 | Hybrid 编排：Dense+Sparse 并行候选 | 完成 | 2026-02-27 | `retrieval.candidates` events（dense/sparse）、`_dedup_candidates`（chunk_id 去重） |
-| D-5 | Fusion：RRF 融合排序 | 未完成 |  | `RrfFusion.fuse`、按 chunk_id 去重 |
+| D-5 | Fusion：RRF 融合排序 | 完成 | 2026-02-27 | `RrfFusion.fuse`、`FusionStage.run`、`retrieval.fused` event |
 | D-6 | Rerank（可选）+ 回退 | 未完成 |  | `rerank_with_fallback`、异常降级 |
 | D-7 | Context 组装：回读 chunk + citations + asset_ids | 未完成 |  | `SqliteStore.fetch_chunks`、`build_citations` |
 | D-8 | Generate：LLM + extractive fallback | 未完成 |  | `GenerateStage.run`、`generate_with_fallback` |

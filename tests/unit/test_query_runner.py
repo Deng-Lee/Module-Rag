@@ -44,6 +44,7 @@ def test_query_runner_spans_and_extractive_response(tmp_path: Path) -> None:
             retriever=ChromaDenseRetriever(embedder=embedder, vector_index=vec),
             sparse_retriever=None,
             sqlite=sqlite,
+            fusion=None,
         )
 
     runner = QueryRunner(runtime_builder=build_rt)
@@ -55,6 +56,7 @@ def test_query_runner_spans_and_extractive_response(tmp_path: Path) -> None:
         "stage.query_norm",
         "stage.retrieve_dense",
         "stage.retrieve_sparse",
+        "stage.fusion",
         "stage.format_response",
     ]
     assert "Install" in resp.content_md
@@ -66,6 +68,7 @@ def test_query_runner_spans_and_extractive_response(tmp_path: Path) -> None:
     for s in resp.trace.spans:
         ev_kinds.extend([e.kind for e in s.events])
     assert "retrieval.candidates" in ev_kinds
+    assert "retrieval.fused" in ev_kinds
 
 
 def test_query_runner_empty_query() -> None:
@@ -80,6 +83,7 @@ def test_query_runner_empty_query() -> None:
             retriever=retriever,
             sparse_retriever=None,
             sqlite=sqlite,
+            fusion=None,
         )
     )  # type: ignore[arg-type]
     resp = runner.run("   ", strategy_config_id="local.default", top_k=3)

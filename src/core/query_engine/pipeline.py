@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
 
 from ..response import ResponseIR
 from ...observability.obs import api as obs
 from ...observability.trace.context import TraceContext
 from .models import QueryParams, QueryRuntime
 from .stages.format_response import FormatResponseStage
+from .stages.fusion import FusionStage
 from .stages.query_norm import query_norm
 from .stages.retrieve_dense import DenseRetrieveStage
 from .stages.retrieve_sparse import SparseRetrieveStage
@@ -25,6 +25,7 @@ class QueryPipeline:
 
     retrieve_dense: DenseRetrieveStage = field(default_factory=DenseRetrieveStage)
     retrieve_sparse: SparseRetrieveStage = field(default_factory=SparseRetrieveStage)
+    fusion: FusionStage = field(default_factory=FusionStage)
     format_response: FormatResponseStage = field(default_factory=FormatResponseStage)
 
     def run(self, query: str, *, runtime: QueryRuntime, params: QueryParams) -> ResponseIR:
@@ -41,10 +42,13 @@ class QueryPipeline:
             sparse = self.retrieve_sparse.run(q, runtime, params)
             _emit_candidates_event("sparse", sparse, top_k=params.top_k)
 
-        candidates = _dedup_candidates(dense + sparse)
+        candidates_by_source = {"dense": dense, "sparse": sparse}
+        with obs.span("stage.fusion", {"stage": "fusion"}):
+            ranked = self.fusion.run(runtime=runtime, params=params, candidates_by_source=candidates_by_source)
+            _emit_ranked_event(ranked, top_k=params.top_k)
 
         with obs.span("stage.format_response", {"stage": "format_response"}):
-            return self.format_response.run(q=q, candidates=candidates, runtime=runtime, trace_id=trace_id)
+            return self.format_response.run(q=q, candidates=ranked, runtime=runtime, trace_id=trace_id)
 
 
 def _emit_candidates_event(source: str, candidates: list, *, top_k: int) -> None:
@@ -60,38 +64,22 @@ def _emit_candidates_event(source: str, candidates: list, *, top_k: int) -> None
         },
     )
 
+def _emit_ranked_event(ranked: list, *, top_k: int) -> None:
+    preview = [
+        {"chunk_id": r.chunk_id, "score": float(r.score), "rank": int(getattr(r, "rank", 0) or 0)}
+        for r in ranked[: min(10, len(ranked))]
+    ]
+    obs.event(
+        "retrieval.fused",
+        {
+            "strategy": "rrf" if ranked and getattr(ranked[0], "source", "") == "rrf" else "passthrough",
+            "top_k": int(top_k),
+            "count": int(len(ranked)),
+            "preview": preview,
+        },
+    )
 
-def _dedup_candidates(candidates: list) -> list:
-    """Dedup by chunk_id while keeping ordering stable.
 
-    D-4 scope: scores across dense/sparse are not comparable; prefer dense when duplicated.
-    """
-    best: dict[str, Any] = {}
-    order: list[str] = []
-
-    for c in candidates:
-        cid = getattr(c, "chunk_id", None)
-        if not isinstance(cid, str) or not cid:
-            continue
-        if cid not in best:
-            best[cid] = c
-            order.append(cid)
-            continue
-
-        prev = best[cid]
-        prev_src = getattr(prev, "source", "")
-        cur_src = getattr(c, "source", "")
-        if prev_src == "dense" and cur_src != "dense":
-            continue
-        if cur_src == "dense" and prev_src != "dense":
-            best[cid] = c
-            continue
-
-        # Same source or both non-dense: keep the larger score.
-        try:
-            if float(getattr(c, "score", 0.0)) > float(getattr(prev, "score", 0.0)):
-                best[cid] = c
-        except Exception:
-            continue
-
-    return [best[cid] for cid in order if cid in best]
+def _dedup_candidates(_: list) -> list:  # pragma: no cover
+    # Deprecated: dedup now lives in FusionStage (D-5).
+    return []
