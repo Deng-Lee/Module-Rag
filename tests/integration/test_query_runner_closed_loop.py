@@ -117,5 +117,6 @@ def test_query_runner_on_ingested_db_returns_sources(tmp_path: Path, tmp_workdir
     assert [s.name for s in resp.trace.spans] == [
         "stage.query_norm",
         "stage.retrieve_dense",
+        "stage.retrieve_sparse",
         "stage.format_response",
     ]

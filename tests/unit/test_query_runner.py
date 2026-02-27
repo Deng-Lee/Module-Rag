@@ -9,7 +9,6 @@ from src.libs.providers.embedding.fake_embedder import FakeEmbedder
 from src.libs.providers.vector_store.in_memory import InMemoryVectorIndex
 from src.core.query_engine.models import QueryRuntime
 from src.libs.providers.vector_store.chroma_retriever import ChromaDenseRetriever
-from src.libs.providers.vector_store.fts5_retriever import Fts5Retriever
 
 
 def test_query_runner_spans_and_extractive_response(tmp_path: Path) -> None:
@@ -55,11 +54,18 @@ def test_query_runner_spans_and_extractive_response(tmp_path: Path) -> None:
     assert [s.name for s in resp.trace.spans] == [
         "stage.query_norm",
         "stage.retrieve_dense",
+        "stage.retrieve_sparse",
         "stage.format_response",
     ]
     assert "Install" in resp.content_md
     assert chunk_id in resp.content_md
     assert resp.sources and resp.sources[0].chunk_id == chunk_id
+
+    # D-4: candidates preview events for each source are recorded.
+    ev_kinds = []
+    for s in resp.trace.spans:
+        ev_kinds.extend([e.kind for e in s.events])
+    assert "retrieval.candidates" in ev_kinds
 
 
 def test_query_runner_empty_query() -> None:

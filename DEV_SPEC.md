@@ -4553,12 +4553,12 @@ B) Dashboard（Web）
 
 目的：把 dense/sparse 作为两条可插拔召回链路编排在同一次 query 中，统一产生 `candidates_by_source`，并把每路结果写入 trace 事件（便于可视化与诊断）。
 
-修改/新增文件（可见变化）：`src/core/query_engine/pipeline.py`、`src/core/query_engine/stages/retrieve_dense.py`、`src/core/query_engine/stages/retrieve_sparse.py`、（可选）`src/core/query_engine/stages/fusion.py`（先占位）。
+修改/新增文件（可见变化）：`src/core/query_engine/pipeline.py`、`src/core/query_engine/stages/retrieve_sparse.py`、`tests/unit/test_sparse_retrieve_stage.py`、`tests/unit/test_query_runner.py`。
 
 实现函数（最小集合）：
 
-* `run_retrieval(runtime, query_norm, top_k) -> {dense:[], sparse:[]}`
-* `emit_candidates_event(source, candidates) -> None`（通过 obs API 产出 `retrieval.candidates`）
+* `_emit_candidates_event(source, candidates) -> None`（通过 obs API 产出 `retrieval.candidates`）
+* `_dedup_candidates(candidates) -> candidates`（按 chunk_id 去重；重复时偏好 dense）
 
 验收标准：
 
@@ -5714,7 +5714,7 @@ B) Dashboard（Web）
 | D-1 | QueryRunner + QueryPipeline 骨架（无 LLM） | 完成 | 2026-02-27 | `QueryRunner.run`（TraceContext + ResponseIR）、`QueryPipeline.run`（query_norm→dense→format）、extractive 输出 |
 | D-2 | Dense-only：Chroma Top-K 召回 | 完成 | 2026-02-27 | `ChromaDenseRetriever.retrieve`（embed+query）、`retrieve_dense` 改为 retriever provider 驱动 |
 | D-3 | Sparse-only：FTS5 Top-K 召回 | 完成 | 2026-02-27 | `build_fts5_query`、`Fts5Retriever.retrieve`、`SparseRetrieveStage` |
-| D-4 | Hybrid 编排：Dense+Sparse 并行候选 | 未完成 |  | `retrieval.candidates` events（dense/sparse） |
+| D-4 | Hybrid 编排：Dense+Sparse 并行候选 | 完成 | 2026-02-27 | `retrieval.candidates` events（dense/sparse）、`_dedup_candidates`（chunk_id 去重） |
 | D-5 | Fusion：RRF 融合排序 | 未完成 |  | `RrfFusion.fuse`、按 chunk_id 去重 |
 | D-6 | Rerank（可选）+ 回退 | 未完成 |  | `rerank_with_fallback`、异常降级 |
 | D-7 | Context 组装：回读 chunk + citations + asset_ids | 未完成 |  | `SqliteStore.fetch_chunks`、`build_citations` |
