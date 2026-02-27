@@ -5,7 +5,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Any
 
 
 @dataclass
@@ -50,6 +50,53 @@ class SqliteStore:
                 """
             )
 
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS assets (
+                    asset_id TEXT PRIMARY KEY,
+                    rel_path TEXT,
+                    created_at REAL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS asset_refs (
+                    ref_id TEXT PRIMARY KEY,
+                    asset_id TEXT,
+                    doc_id TEXT,
+                    version_id TEXT,
+                    source_type TEXT,
+                    origin_ref TEXT,
+                    anchor_json TEXT,
+                    created_at REAL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS chunks (
+                    chunk_id TEXT PRIMARY KEY,
+                    doc_id TEXT,
+                    version_id TEXT,
+                    section_id TEXT,
+                    section_path TEXT,
+                    chunk_index INTEGER,
+                    chunk_text TEXT,
+                    created_at REAL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS chunk_assets (
+                    chunk_id TEXT,
+                    asset_id TEXT,
+                    PRIMARY KEY(chunk_id, asset_id)
+                )
+                """
+            )
+
     def find_version_by_file_hash(self, file_sha256: str) -> tuple[str, str] | None:
         with self._connect() as conn:
             row = conn.execute(
@@ -86,6 +133,47 @@ class SqliteStore:
                     "SELECT COUNT(*) AS c FROM doc_versions WHERE doc_id=?", (doc_id,)
                 ).fetchone()
         return int(row["c"] if row else 0)
+
+    def set_version_status(self, version_id: str, status: str) -> None:
+        with self._connect() as conn:
+            conn.execute("UPDATE doc_versions SET status=? WHERE version_id=?", (status, version_id))
+
+    def upsert_asset(self, asset_id: str, rel_path: str | None = None) -> None:
+        ts = time.time()
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO assets(asset_id, rel_path, created_at) VALUES(?, ?, ?)",
+                (asset_id, rel_path, ts),
+            )
+
+    def upsert_asset_ref(self, *, ref_id: str, asset_id: str, doc_id: str, version_id: str, source_type: str, origin_ref: str, anchor_json: str) -> None:
+        ts = time.time()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO asset_refs(ref_id, asset_id, doc_id, version_id, source_type, origin_ref, anchor_json, created_at)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (ref_id, asset_id, doc_id, version_id, source_type, origin_ref, anchor_json, ts),
+            )
+
+    def upsert_chunk(self, *, chunk_id: str, doc_id: str, version_id: str, section_id: str, section_path: str, chunk_index: int, chunk_text: str) -> None:
+        ts = time.time()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO chunks(chunk_id, doc_id, version_id, section_id, section_path, chunk_index, chunk_text, created_at)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (chunk_id, doc_id, version_id, section_id, section_path, chunk_index, chunk_text, ts),
+            )
+
+    def upsert_chunk_asset(self, *, chunk_id: str, asset_id: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO chunk_assets(chunk_id, asset_id) VALUES(?, ?)",
+                (chunk_id, asset_id),
+            )
 
 
 def new_doc_id() -> str:

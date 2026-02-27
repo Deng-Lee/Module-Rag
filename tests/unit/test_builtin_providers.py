@@ -6,7 +6,7 @@ from src.libs.providers.llm import FakeLLM
 from src.libs.providers.loader import MarkdownLoader, PdfLoader
 from src.libs.providers.reranker import NoopReranker
 from src.libs.providers.splitter import MarkdownHeadingsSectioner, RecursiveCharChunkerWithinSection
-from src.libs.providers.vector_store import InMemoryVectorIndex
+from src.libs.providers.vector_store import ChromaLiteVectorIndex, InMemoryVectorIndex
 from src.libs.registry import ProviderRegistry
 from src.libs.interfaces.vector_store.store import VectorItem
 from src.libs.interfaces.vector_store.retriever import RankedCandidate
@@ -61,6 +61,7 @@ def test_register_builtin_providers() -> None:
     assert reg.has("chunker", "chunker.rcts_within_section")
     assert reg.has("llm", "llm.fake")
     assert reg.has("vector_index", "vector.in_memory")
+    assert reg.has("vector_index", "vector.chroma_lite")
     assert reg.has("reranker", "reranker.noop")
 
     assert isinstance(reg.create("embedder", "embedder.fake"), FakeEmbedder)
@@ -71,4 +72,5 @@ def test_register_builtin_providers() -> None:
     assert isinstance(reg.create("chunker", "chunker.rcts_within_section"), RecursiveCharChunkerWithinSection)
     assert isinstance(reg.create("llm", "llm.fake"), FakeLLM)
     assert isinstance(reg.create("vector_index", "vector.in_memory"), InMemoryVectorIndex)
+    assert isinstance(reg.create("vector_index", "vector.chroma_lite"), ChromaLiteVectorIndex)
     assert isinstance(reg.create("reranker", "reranker.noop"), NoopReranker)

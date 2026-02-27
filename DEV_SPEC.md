@@ -4435,7 +4435,7 @@ B) Dashboard（Web）
 
 目的：把本次 ingest 的所有产物写入存储：事实层 md（FS）、结构化元数据（SQLite）、向量索引（Chroma）；并返回可用于观测与管理的 ingest_result。
 
-修改/新增文件（可见变化）：`src/ingestion/stages/storage/upsert.py`、`src/ingestion/stages/storage/fs.py`、`src/ingestion/stages/storage/sqlite.py`、`src/ingestion/stages/storage/chroma.py`、`src/ingestion/stages/storage/fts5.py`。
+修改/新增文件（可见变化）：`src/ingestion/stages/storage/upsert.py`、`src/ingestion/stages/storage/fs.py`、`src/ingestion/stages/storage/sqlite.py`、`src/ingestion/stages/storage/chroma.py`、`src/ingestion/stages/storage/fts5.py`、`tests/unit/test_fts5_store.py`、`tests/integration/test_upsert_closed_loop.py`。
 
 实现函数（最小集合）：
 
@@ -5704,7 +5704,7 @@ B) Dashboard（Web）
 | C-8 | Transform Post：检索视图 chunk_retrieval_text | 完成 | 2026-02-25 | `build_chunk_retrieval_text`（模板化） |
 | C-9 | Encoding：dense fake + sparse MVP | 完成 | 2026-02-25 | dense vectors + `{chunk_id,text}` 视图 |
 | C-10 | Embedding Cache：向量复用 | 完成 | 2026-02-25 | `EmbeddingCache.get/put`、cache key 对齐 canonical |
-| C-11 | Upsert：FS + SQLite + Chroma + FTS5 | 未完成 |  | `ChromaStore.upsert`、`Fts5Store.upsert`、一致性 |
+| C-11 | Upsert：FS + SQLite + Chroma + FTS5 | 完成 | 2026-02-25 | `UpsertStage.run`（md/SQLite/vector/FTS5 同步落地）、`Fts5Store.query` 冒烟、`vector.chroma_lite` 持久化 |
 | C-12 | Ingestion E2E 回归（含 sparse 可用性） | 未完成 |  | `test_ingest_pipeline` + sparse smoke |
 
 #### 6.4.4 阶段 D

@@ -13,6 +13,9 @@ from .transform.retrieval_view import RetrievalViewConfig, build_chunk_retrieval
 from .storage.fs import FsStore
 from .storage.assets import AssetStore
 from .storage.sqlite import SqliteStore
+from .storage.fts5 import Fts5Store
+from .storage.chroma import ChromaStore
+from .storage.upsert import UpsertResult, UpsertStage
 
 __all__ = [
     "StageSpec",
@@ -22,6 +25,10 @@ __all__ = [
     "FsStore",
     "AssetStore",
     "SqliteStore",
+    "Fts5Store",
+    "ChromaStore",
+    "UpsertStage",
+    "UpsertResult",
     "LoaderStage",
     "detect_file_type",
     "SectionerStage",

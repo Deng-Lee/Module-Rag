@@ -10,6 +10,7 @@ from .splitter.markdown_headings import MarkdownHeadingsSectioner
 from .splitter.recursive_chunker import RecursiveCharChunkerWithinSection
 from .splitter.simple_chunker import SimpleCharChunkerWithinSection
 from .vector_store.in_memory import InMemoryVectorIndex
+from .vector_store.chroma_lite import ChromaLiteVectorIndex
 
 
 def register_builtin_providers(registry: ProviderRegistry) -> None:
@@ -24,4 +25,5 @@ def register_builtin_providers(registry: ProviderRegistry) -> None:
     registry.register("chunker", "chunker.simple_char_within_section", SimpleCharChunkerWithinSection)
     registry.register("llm", "llm.fake", FakeLLM)
     registry.register("vector_index", "vector.in_memory", InMemoryVectorIndex)
+    registry.register("vector_index", "vector.chroma_lite", ChromaLiteVectorIndex)
     registry.register("reranker", "reranker.noop", NoopReranker)
