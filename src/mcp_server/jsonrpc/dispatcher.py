@@ -3,11 +3,21 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from .codec import INTERNAL_ERROR, INVALID_REQUEST, METHOD_NOT_FOUND
+from .codec import INTERNAL_ERROR, INVALID_PARAMS, INVALID_REQUEST, METHOD_NOT_FOUND
 from .models import JsonRpcError, JsonRpcRequest, JsonRpcResponse
 
 
 Handler = Callable[[JsonRpcRequest], Any]
+
+
+class JsonRpcAppError(Exception):
+    """Raise this from handlers to return a specific JSON-RPC error."""
+
+    def __init__(self, code: int, message: str, data: Any | None = None) -> None:
+        super().__init__(message)
+        self.code = int(code)
+        self.message = str(message)
+        self.data = data
 
 
 @dataclass
@@ -43,6 +53,8 @@ class Dispatcher:
 
 
 def default_error_mapper(exc: Exception) -> JsonRpcError:
+    if isinstance(exc, JsonRpcAppError):
+        return JsonRpcError(code=exc.code, message=exc.message, data=exc.data)
+
     # Keep it conservative: leak minimal info; verbose details should go to trace/logs.
     return JsonRpcError(code=INTERNAL_ERROR, message="internal error", data={"exc_type": type(exc).__name__})
-

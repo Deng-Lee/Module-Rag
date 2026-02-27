@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from src.mcp_server.jsonrpc.codec import METHOD_NOT_FOUND
-from src.mcp_server.jsonrpc.dispatcher import Dispatcher
+from src.mcp_server.jsonrpc.codec import INVALID_PARAMS, METHOD_NOT_FOUND
+from src.mcp_server.jsonrpc.dispatcher import Dispatcher, JsonRpcAppError
 from src.mcp_server.jsonrpc.models import JsonRpcRequest
 
 
@@ -35,3 +35,16 @@ def test_dispatcher_exception_maps_to_internal_error() -> None:
     assert resp.error is not None
     assert resp.error.code == -32603
 
+
+def test_dispatcher_app_error_uses_custom_code() -> None:
+    d = Dispatcher()
+
+    def bad_params(req: JsonRpcRequest):
+        raise JsonRpcAppError(INVALID_PARAMS, "invalid params", {"x": 1})
+
+    d.register("bad_params", bad_params)
+    resp = d.handle(JsonRpcRequest(jsonrpc="2.0", method="bad_params", params=None, id=1))
+    assert resp.error is not None
+    assert resp.error.code == INVALID_PARAMS
+    assert resp.error.message == "invalid params"
+    assert resp.error.data == {"x": 1}

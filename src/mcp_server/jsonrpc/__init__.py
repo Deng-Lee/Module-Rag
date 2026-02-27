@@ -10,7 +10,7 @@ from .codec import (
     encode_response,
 )
 from .models import JsonRpcError, JsonRpcRequest, JsonRpcResponse
-from .dispatcher import Dispatcher, default_error_mapper
+from .dispatcher import Dispatcher, JsonRpcAppError, default_error_mapper
 from .stdio_transport import StdioTransport
 
 __all__ = [
@@ -18,6 +18,7 @@ __all__ = [
     "JsonRpcResponse",
     "JsonRpcError",
     "Dispatcher",
+    "JsonRpcAppError",
     "default_error_mapper",
     "JsonRpcCodecError",
     "decode_request",

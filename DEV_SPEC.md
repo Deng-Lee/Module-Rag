@@ -4730,7 +4730,7 @@ B) Dashboard（Web）
 
 目的：实现 MCP 协议入口（tools/resources 能力宣告与语义处理），并把 tools 的执行统一走“工具注册表”，确保 1 tool = 1 file。
 
-修改/新增文件（可见变化）：`src/mcp_server/mcp/protocol.py`、`src/mcp_server/mcp/session.py`、`src/mcp_server/mcp/tools/__init__.py`。
+修改/新增文件（可见变化）：`src/mcp_server/mcp/protocol.py`、`src/mcp_server/mcp/session.py`、`src/mcp_server/mcp/tools/registry.py`、`src/mcp_server/mcp/tools/ping.py`、`tests/unit/test_mcp_protocol.py`、`tests/integration/test_mcp_tools_stdio.py`。
 
 实现函数（最小集合）：
 
@@ -5727,7 +5727,7 @@ B) Dashboard（Web）
 |---|---|---|---|---|
 | E-1 | stdio JSON-RPC 传输与编解码 | 完成 | 2026-02-27 | `decode_request/encode_response/encode_error`、`StdioTransport.serve` |
 | E-2 | Dispatcher：method 路由 | 完成 | 2026-02-27 | `Dispatcher.register/handle`、`default_error_mapper` |
-| E-3 | MCP 协议语义层：tools/list + tools/call | 未完成 |  | `McpProtocol.handle_tools_list/tools_call` |
+| E-3 | MCP 协议语义层：tools/list + tools/call | 完成 | 2026-02-27 | `McpProtocol.handle_initialize/tools_list/tools_call`、ToolRegistry |
 | E-4 | Schema + L0/L1/L2 Envelope | 未完成 |  | `validate_tool_args`、`build_response_envelope`、`degrade` |
 | E-5 | Tool：library.ingest | 未完成 |  | `tool_ingest`→`IngestionPipeline.run` |
 | E-6 | Tool：library.query | 未完成 |  | `tool_query`→`QueryRunner.run` |
