@@ -4709,13 +4709,13 @@ B) Dashboard（Web）
 
 目的：实现 method 路由，把 JSON-RPC 的 `method` 分发到 MCP 语义处理层；避免在 transport 层写业务分支。
 
-修改/新增文件（可见变化）：`src/mcp_server/jsonrpc/dispatcher.py`。
+修改/新增文件（可见变化）：`src/mcp_server/jsonrpc/dispatcher.py`、`src/mcp_server/jsonrpc/stdio_transport.py`（接入 request-aware handler）、`tests/unit/test_jsonrpc_dispatcher.py`。
 
 实现函数（最小集合）：
 
 * `Dispatcher.register(method: str, handler) -> None`
 * `Dispatcher.handle(req) -> JsonRpcResponse`
-* `Dispatcher.default_error_mapper(exc) -> JsonRpcError`
+* `default_error_mapper(exc) -> JsonRpcError`
 
 验收标准：
 
@@ -5726,7 +5726,7 @@ B) Dashboard（Web）
 | 任务编号 | 任务名称 | 状态 | 完成日期 | 备注（关键实现） |
 |---|---|---|---|---|
 | E-1 | stdio JSON-RPC 传输与编解码 | 完成 | 2026-02-27 | `decode_request/encode_response/encode_error`、`StdioTransport.serve` |
-| E-2 | Dispatcher：method 路由 | 未完成 |  | `Dispatcher.register/handle` |
+| E-2 | Dispatcher：method 路由 | 完成 | 2026-02-27 | `Dispatcher.register/handle`、`default_error_mapper` |
 | E-3 | MCP 协议语义层：tools/list + tools/call | 未完成 |  | `McpProtocol.handle_tools_list/tools_call` |
 | E-4 | Schema + L0/L1/L2 Envelope | 未完成 |  | `validate_tool_args`、`build_response_envelope`、`degrade` |
 | E-5 | Tool：library.ingest | 未完成 |  | `tool_ingest`→`IngestionPipeline.run` |

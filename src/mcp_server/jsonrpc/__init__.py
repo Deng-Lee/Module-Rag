@@ -10,12 +10,15 @@ from .codec import (
     encode_response,
 )
 from .models import JsonRpcError, JsonRpcRequest, JsonRpcResponse
+from .dispatcher import Dispatcher, default_error_mapper
 from .stdio_transport import StdioTransport
 
 __all__ = [
     "JsonRpcRequest",
     "JsonRpcResponse",
     "JsonRpcError",
+    "Dispatcher",
+    "default_error_mapper",
     "JsonRpcCodecError",
     "decode_request",
     "encode_response",
@@ -27,4 +30,3 @@ __all__ = [
     "INVALID_PARAMS",
     "INTERNAL_ERROR",
 ]
-

@@ -9,6 +9,7 @@ from .models import JsonRpcResponse
 
 
 Handler = Callable[[str, Any | None, Any | None], Any]
+RequestHandler = Callable[[Any], JsonRpcResponse]
 
 
 @dataclass
@@ -54,6 +55,27 @@ class StdioTransport:
             except Exception as e:
                 self._write(encode_error(req.id, INTERNAL_ERROR, "internal error", str(e)))
 
+    def serve_requests(self, handler: RequestHandler) -> None:
+        """Serve using a request-aware handler (Dispatcher-compatible)."""
+        for line in self._iter_lines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                req = decode_request(line)
+            except JsonRpcCodecError as e:
+                self._write(encode_error(e.req_id, e.code, e.message, e.data))
+                continue
+            except Exception as e:
+                self._write(encode_error(None, INTERNAL_ERROR, "internal error", str(e)))
+                continue
+
+            resp = handler(req)
+            if req.id is None:
+                # Notification: do not emit a response.
+                continue
+            self._write(encode_response(resp))
+
     def _iter_lines(self):
         while True:
             line = self.stdin.readline()
@@ -64,4 +86,3 @@ class StdioTransport:
     def _write(self, payload: str) -> None:
         self.stdout.write(payload + "\n")
         self.stdout.flush()
-

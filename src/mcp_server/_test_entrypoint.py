@@ -1,18 +1,20 @@
 from __future__ import annotations
 
+from .jsonrpc.dispatcher import Dispatcher
+from .jsonrpc.models import JsonRpcRequest
 from .jsonrpc.stdio_transport import StdioTransport
 
 
 def main() -> None:
-    def handler(method, params, req_id):
-        _ = req_id
-        if method == "ping":
-            return {"ok": True, "params": params}
-        raise RuntimeError(f"unknown method: {method}")
+    disp = Dispatcher()
 
-    StdioTransport().serve(handler)
+    def ping(req: JsonRpcRequest):
+        return {"ok": True, "params": req.params}
+
+    disp.register("ping", ping)
+
+    StdioTransport().serve_requests(disp.handle)
 
 
 if __name__ == "__main__":  # pragma: no cover
     main()
-
