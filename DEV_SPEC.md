@@ -4748,17 +4748,22 @@ B) Dashboard（Web）
 * 单测：tools 注册与 list 输出（schema 存在）；
 * 单测：tools/call 调用到正确 handler。
 
-4. **E-4 对外契约：Pydantic request/response schema + L0/L1/L2 Envelope**
+4. **E-4 对外契约：Schema 校验 + L0/L1/L2 Envelope**
 
-目的：把 tool 入参/出参固化为可校验 schema；统一 ResponseEnvelope 并支持 client 能力分级（L0/L1/L2）与降级策略。
+目的：把 tool 入参/出参固化为可校验 schema；统一 tools/call 的返回形态，并支持 client 能力分级（L0/L1/L2）与降级策略。
 
-修改/新增文件（可见变化）：`src/mcp_server/schemas/request.py`、`src/mcp_server/schemas/response.py`。
+说明：
+
+* 当前实现采用 **最小 JSON Schema 子集校验**（`type/object/properties/required/additionalProperties/primitive types`）以保证依赖轻量、便于离线跑通；
+* 若后续需要更强类型约束，可在不改变对外 `inputSchema` 的前提下，替换为 Pydantic/TypeAdapter 等更完整的校验实现（属于实现细节，不影响 Tool 契约）。
+
+修改/新增文件（可见变化）：`src/mcp_server/mcp/schema.py`、`src/mcp_server/mcp/envelope.py`、`src/mcp_server/mcp/protocol.py`（tools/call 接入校验 + envelope）、`tests/unit/test_mcp_schema_and_envelope.py`。
 
 实现函数（最小集合）：
 
-* `validate_tool_args(tool_name, args) -> ParsedArgs`
-* `build_response_envelope(level, payload, warnings=None, trace_id=None) -> ResponseEnvelope`
-* `degrade(level, payload) -> payload_for_level`
+* `validate_tool_args(schema, args) -> args`
+* `build_response_envelope(session, tool_name, output) -> ToolsCallResult`
+* `degrade(client_level, result) -> result_for_level`
 
 验收标准：
 
@@ -5728,7 +5733,7 @@ B) Dashboard（Web）
 | E-1 | stdio JSON-RPC 传输与编解码 | 完成 | 2026-02-27 | `decode_request/encode_response/encode_error`、`StdioTransport.serve` |
 | E-2 | Dispatcher：method 路由 | 完成 | 2026-02-27 | `Dispatcher.register/handle`、`default_error_mapper` |
 | E-3 | MCP 协议语义层：tools/list + tools/call | 完成 | 2026-02-27 | `McpProtocol.handle_initialize/tools_list/tools_call`、ToolRegistry |
-| E-4 | Schema + L0/L1/L2 Envelope | 未完成 |  | `validate_tool_args`、`build_response_envelope`、`degrade` |
+| E-4 | Schema + L0/L1/L2 Envelope | 完成 | 2026-02-27 | `validate_tool_args`（最小 JSON Schema 子集）、`build_response_envelope`（text-first）、`degrade`（L0/L1/L2） |
 | E-5 | Tool：library.ingest | 未完成 |  | `tool_ingest`→`IngestionPipeline.run` |
 | E-6 | Tool：library.query | 未完成 |  | `tool_query`→`QueryRunner.run` |
 | E-7 | Tools：query_assets/get_document（资源旁路） | 未完成 |  | 批量 thumb、facts md 回读 |

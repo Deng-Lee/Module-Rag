@@ -11,7 +11,7 @@ def _handler(session: McpSession, args: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(msg, str):
         msg = "pong"
     text = f"[{session.client_level}] {msg}"
-    return {"content": [{"type": "text", "text": text}]}
+    return {"text": text}
 
 
 tool = FunctionTool(
@@ -26,4 +26,3 @@ tool = FunctionTool(
     ),
     fn=_handler,
 )
-

@@ -5,6 +5,8 @@ from typing import Any
 
 from ..jsonrpc.codec import INVALID_PARAMS
 from ..jsonrpc.dispatcher import JsonRpcAppError
+from .envelope import build_response_envelope
+from .schema import SchemaValidationError, validate_tool_args
 from .session import McpSession
 from .tools.registry import ToolRegistry
 
@@ -45,5 +47,12 @@ class McpProtocol:
             args = {}
         if not isinstance(args, dict):
             raise JsonRpcAppError(INVALID_PARAMS, "tool args must be an object")
-        return tool.call(session, args)
 
+        # Validate args using tool spec schema.
+        try:
+            args = validate_tool_args(tool.spec.input_schema, args)
+        except SchemaValidationError as e:
+            raise JsonRpcAppError(INVALID_PARAMS, "invalid params", {"message": str(e)}) from e
+
+        out = tool.call(session, args)
+        return build_response_envelope(session=session, tool_name=name, output=out)
