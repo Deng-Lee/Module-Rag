@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 from ..query_engine import QueryParams, QueryPipeline, QueryRuntime
 from ..response import ResponseIR
@@ -81,6 +81,8 @@ def _build_query_runtime(strategy_config_id: str, *, settings_path: str | Path) 
 
     # Sparse retriever (optional).
     sparse_retriever = None
+    sparse_provider_id: str | None = None
+    sparse_params: dict | None = None
     try:
         sparse_provider_id, sparse_params = strategy.resolve_provider("sparse_retriever")
         sparse_retriever = registry.create(
@@ -96,6 +98,8 @@ def _build_query_runtime(strategy_config_id: str, *, settings_path: str | Path) 
 
     # Fusion (optional; default to RRF if available).
     fusion = None
+    fusion_provider_id: str | None = None
+    fusion_params: dict | None = None
     try:
         fusion_provider_id, fusion_params = strategy.resolve_provider("fusion")
         fusion = registry.create("fusion", fusion_provider_id, **(fusion_params or {}))
@@ -107,6 +111,8 @@ def _build_query_runtime(strategy_config_id: str, *, settings_path: str | Path) 
 
     # Reranker (optional).
     reranker = None
+    reranker_provider_id: str | None = None
+    reranker_params: dict | None = None
     try:
         reranker_provider_id, reranker_params = strategy.resolve_provider("reranker")
         if reranker_provider_id not in {"noop", "reranker.noop"}:
@@ -115,6 +121,20 @@ def _build_query_runtime(strategy_config_id: str, *, settings_path: str | Path) 
             reranker = None
     except Exception:
         reranker = None
+
+    _attach_providers_snapshot(
+        strategy=strategy,
+        vec_provider_id=vec_provider_id,
+        vec_params=vec_kwargs,
+        retriever_provider_id=retriever_provider_id,
+        retriever_params=retriever_params,
+        sparse_provider_id=sparse_provider_id,
+        sparse_params=sparse_params,
+        fusion_provider_id=fusion_provider_id,
+        fusion_params=fusion_params,
+        reranker_provider_id=reranker_provider_id,
+        reranker_params=reranker_params,
+    )
 
     return QueryRuntime(
         embedder=embedder,
@@ -126,3 +146,55 @@ def _build_query_runtime(strategy_config_id: str, *, settings_path: str | Path) 
         reranker=reranker,
         llm=llm,
     )
+
+
+def _attach_providers_snapshot(
+    *,
+    strategy,
+    vec_provider_id: str,
+    vec_params: dict,
+    retriever_provider_id: str,
+    retriever_params: dict,
+    sparse_provider_id: str | None,
+    sparse_params: dict | None,
+    fusion_provider_id: str | None,
+    fusion_params: dict | None,
+    reranker_provider_id: str | None,
+    reranker_params: dict | None,
+) -> None:
+    ctx = TraceContext.current()
+    if ctx is None:
+        return
+
+    def _meta(provider_id: str, params: dict | None) -> dict[str, Any]:
+        params = params or {}
+        profile_id = params.get("profile_id") or params.get("text_norm_profile_id")
+        version = params.get("version") or params.get("model_version")
+        meta = {"provider_id": provider_id}
+        if profile_id:
+            meta["profile_id"] = str(profile_id)
+        if version:
+            meta["version"] = str(version)
+        return meta
+
+    snapshot: dict[str, dict[str, Any]] = {}
+
+    embedder_provider_id, embedder_params = strategy.resolve_provider("embedder")
+    snapshot["embedder"] = _meta(embedder_provider_id, embedder_params)
+    snapshot["vector_index"] = _meta(vec_provider_id, vec_params)
+    snapshot["retriever"] = _meta(retriever_provider_id, retriever_params)
+
+    try:
+        llm_provider_id, llm_params = strategy.resolve_provider("llm")
+        snapshot["llm"] = _meta(llm_provider_id, llm_params)
+    except Exception:
+        pass
+
+    if sparse_provider_id:
+        snapshot["sparse_retriever"] = _meta(sparse_provider_id, sparse_params)
+    if fusion_provider_id:
+        snapshot["fusion"] = _meta(fusion_provider_id, fusion_params)
+    if reranker_provider_id:
+        snapshot["reranker"] = _meta(reranker_provider_id, reranker_params)
+
+    ctx.providers_snapshot = snapshot

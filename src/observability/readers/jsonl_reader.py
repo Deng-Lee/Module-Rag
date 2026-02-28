@@ -39,6 +39,7 @@ def _envelope_from_dict(d: dict[str, Any]) -> TraceEnvelope:
         spans=spans,
         events=events,
         aggregates=dict(d.get("aggregates", {})),
+        providers=dict(d.get("providers", {})),
     )
 
 

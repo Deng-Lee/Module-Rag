@@ -251,6 +251,19 @@ def _build_ingestion_pipeline(strategy_config_id: str, *, settings_path: Path) -
         )
         return state
 
+    providers_snapshot = _build_providers_snapshot(
+        loader_provider_id=loader_provider_id,
+        loader_params=loader_params,
+        sectioner_provider_id=sectioner_provider_id,
+        sectioner_params=sectioner_params,
+        chunker_provider_id=chunker_provider_id,
+        chunker_params=chunker_params,
+        embedder_provider_id=embedder_provider_id,
+        embedder_params=embedder_params,
+        vector_provider_id=vector_provider_id,
+        vector_params=vector_params,
+    )
+
     stages = [
         StageSpec(name="dedup", fn=st_dedup),
         StageSpec(name="loader", fn=st_loader),
@@ -262,7 +275,40 @@ def _build_ingestion_pipeline(strategy_config_id: str, *, settings_path: Path) -
         StageSpec(name="embedding", fn=st_embedding),
         StageSpec(name="upsert", fn=st_upsert),
     ]
-    return IngestionPipeline(stages)
+    return IngestionPipeline(stages, providers_snapshot=providers_snapshot)
+
+
+def _build_providers_snapshot(
+    *,
+    loader_provider_id: str,
+    loader_params: dict | None,
+    sectioner_provider_id: str,
+    sectioner_params: dict | None,
+    chunker_provider_id: str,
+    chunker_params: dict | None,
+    embedder_provider_id: str,
+    embedder_params: dict | None,
+    vector_provider_id: str,
+    vector_params: dict | None,
+) -> dict[str, dict[str, Any]]:
+    def _meta(provider_id: str, params: dict | None) -> dict[str, Any]:
+        params = params or {}
+        profile_id = params.get("profile_id") or params.get("text_norm_profile_id")
+        version = params.get("version") or params.get("model_version")
+        meta = {"provider_id": provider_id}
+        if profile_id:
+            meta["profile_id"] = str(profile_id)
+        if version:
+            meta["version"] = str(version)
+        return meta
+
+    return {
+        "loader": _meta(loader_provider_id, loader_params),
+        "sectioner": _meta(sectioner_provider_id, sectioner_params),
+        "chunker": _meta(chunker_provider_id, chunker_params),
+        "embedder": _meta(embedder_provider_id, embedder_params),
+        "vector_index": _meta(vector_provider_id, vector_params),
+    }
 
 
 def _result_to_response(result: IngestResult) -> ResponseIR:

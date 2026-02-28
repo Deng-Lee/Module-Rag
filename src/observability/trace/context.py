@@ -40,6 +40,7 @@ class TraceContext:
     _span_stack: list[str] = field(default_factory=list)
     _span_order: list[str] = field(default_factory=list)
     _trace_events: list[EventRecord] = field(default_factory=list)
+    providers_snapshot: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     @classmethod
     def new(
@@ -151,6 +152,7 @@ class TraceContext:
             spans=spans,
             events=list(self._trace_events),
             aggregates={},
+            providers=dict(self.providers_snapshot),
         )
         # Best-effort: notify observability sink, if configured.
         try:

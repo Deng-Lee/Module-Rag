@@ -29,8 +29,9 @@ DEFAULT_STAGE_ORDER: list[str] = [
 
 
 class IngestionPipeline:
-    def __init__(self, stages: Iterable[StageSpec]) -> None:
+    def __init__(self, stages: Iterable[StageSpec], *, providers_snapshot: dict[str, dict[str, Any]] | None = None) -> None:
         self._stages = list(stages)
+        self._providers_snapshot = dict(providers_snapshot or {})
 
     def run(
         self,
@@ -39,6 +40,8 @@ class IngestionPipeline:
         on_progress: ProgressCallback | None = None,
     ) -> IngestResult:
         ctx = TraceContext.new(trace_type="ingestion", strategy_config_id=strategy_config_id)
+        if self._providers_snapshot:
+            ctx.providers_snapshot = dict(self._providers_snapshot)
         with TraceContext.activate(ctx):
             data = input_data
             total = len(self._stages) if self._stages else 1

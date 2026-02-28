@@ -44,3 +44,13 @@ def test_ingestion_pipeline_progress_callback() -> None:
 
     assert events[0][2] == "start"
     assert events[-1][2] == "end"
+
+
+def test_ingestion_pipeline_providers_snapshot() -> None:
+    stages = [StageSpec(name="dedup", fn=lambda data, ctx: data)]
+    snapshot = {"loader": {"provider_id": "loader.markdown"}}
+    pipeline = IngestionPipeline(stages, providers_snapshot=snapshot)
+    result = pipeline.run("start", strategy_config_id="local.default")
+
+    assert result.trace is not None
+    assert result.trace.providers.get("loader", {}).get("provider_id") == "loader.markdown"

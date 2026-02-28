@@ -11,7 +11,8 @@
     "strategy_config_id",
     "spans",
     "events",
-    "aggregates"
+    "aggregates",
+    "providers"
   ],
   "properties": {
     "schema_version": { "type": "string" },
@@ -29,6 +30,7 @@
       "type": "array",
       "items": { "type": "object" }
     },
-    "aggregates": { "type": "object" }
+    "aggregates": { "type": "object" },
+    "providers": { "type": "object" }
   }
 }

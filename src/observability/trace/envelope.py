@@ -125,6 +125,7 @@ class TraceEnvelope:
     spans: list[SpanRecord] = field(default_factory=list)
     events: list[EventRecord] = field(default_factory=list)  # trace-level events
     aggregates: JsonDict = field(default_factory=dict)
+    providers: JsonDict = field(default_factory=dict)
     schema_version: str = TRACE_SCHEMA_VERSION
 
     def to_dict(self) -> JsonDict:
@@ -139,6 +140,7 @@ class TraceEnvelope:
             "spans": [s.to_dict() for s in self.spans],
             "events": [e.to_dict() for e in self.events],
             "aggregates": self.aggregates,
+            "providers": self.providers,
         }
 
     def validate(self, *, strict: bool = True) -> None:
