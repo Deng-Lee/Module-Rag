@@ -4878,6 +4878,49 @@ B) Dashboard（Web）
 * `SqliteStore.mark_deleted(doc_id, version_id=None) -> None`
 * `ChromaStore.delete(where) -> None`（按 doc_id/version_id 删除）
 
+Tool 契约（Delete）：`library.delete_document`
+
+定位：管理类“有副作用操作”。其目标是把删除从“单点删除”升级为“跨存储一致口径的删除”，并在 L0/L1/L2 下提供可读文本 + 可机器处理结构化结果。
+
+输入（`inputSchema` 摘要）：
+
+* `doc_id: string`（必填）
+* `version_id: string?`（可选；不填则表示删除该 doc 的所有版本，或按策略删除 latest/active，需在实现中固定口径）
+* `mode: string?`（可选，默认 `soft`；允许值：`soft`/`hard`；本阶段默认只实现 `soft`，`hard` 作为占位并在 E-11 固化）
+* `reason: string?`（可选；用于审计/回放说明）
+* `dry_run: boolean?`（可选，默认 `false`；为 `true` 时只计算影响范围，不实际写入）
+
+输出（`structuredContent.structured` 摘要）：
+
+* `status: "ok" | "noop"`（`noop` 表示目标不存在或已删除，且实现选择“幂等成功”口径）
+* `mode: "soft" | "hard"`
+* `target: { doc_id: string, version_id?: string }`
+* `deleted: { doc_id: string, version_ids: string[] }`（doc 级删除时返回受影响版本列表；version 级删除时列表长度为 1）
+* `affected: { sqlite: {...}, chroma: {...}, fts5: {...}, fs: {...} }`（各存储的影响计数；软删通常是“标记/过滤计数”，硬删是“物理删除计数”）
+* `warnings: string[]`（例如 `hard_delete_not_enabled`、`partial_failure`、`already_deleted`）
+
+错误约定（JSON-RPC）：
+
+* 参数非法：`-32602 invalid params`
+* 目标不可删除（例如 mode=hard 但未启用）：`-32602 invalid params`（并在 data 中给出 `reason`）
+* 内部错误：`-32603 internal error`（必须携带 `data.trace_id`）
+
+Tool 契约（List）：`library.list_documents`
+
+定位：管理类“只读枚举”。用于 Dashboard/Client 展示文档与版本列表，并作为 delete 的前置选择器；默认不返回 deleted（除非显式开启 `include_deleted=true`）。
+
+输入（`inputSchema` 摘要）：
+
+* `limit: integer?`（可选，默认 20；建议最大 200）
+* `offset: integer?`（可选，默认 0）
+* `include_deleted: boolean?`（可选，默认 false）
+* `doc_id: string?`（可选；仅列出指定 doc 的版本）
+
+输出（`structuredContent.structured` 摘要）：
+
+* `items: Array<{ doc_id, version_id, status, file_sha256, created_at }>`（按 `created_at desc` 排序）
+* `limit/offset/include_deleted`（回显，便于 UI 状态同步）
+
 验收标准：
 
 * `list_documents` 能分页返回 doc/version 列表（至少包含 doc_id/version_id/status/updated_at）；
@@ -5742,7 +5785,7 @@ B) Dashboard（Web）
 | E-6 | Tool：library.query | 完成 | 2026-02-27 | `normalize_query_input/make_tool`、`QueryRunner.run`、ingest→query stdio e2e |
 | E-7 | Tools：query_assets/get_document（资源旁路） | 完成 | 2026-02-27 | `library.query_assets/library.get_document` + ingest→query→assets stdio e2e |
 | E-8 | 错误映射 + 超时/取消预留 | 完成 | 2026-02-27 | `map_exception_to_jsonrpc`、`McpSession.with_deadline/new_call`、timeout_ms 透传与 deadline exceeded |
-| E-9 | 管理类 Tools：list/delete | 未完成 |  | `tool_list_documents/tool_delete_document` + 过滤召回 |
+| E-9 | 管理类 Tools：list/delete | 完成 | 2026-02-27 | `library.list_documents/library.delete_document`（软删）+ Query 默认过滤 deleted |
 | E-10 | MCP Server 启动入口装配（entry wiring） | 未完成 |  | `build_runtime/build_observability/serve_stdio` |
 | E-11 | 删除一致性与回收策略（跨存储统一口径） | 未完成 |  | `AdminRunner.delete_document` + Chroma/FTS5/FS 一致处理 |
 

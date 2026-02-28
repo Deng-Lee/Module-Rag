@@ -1,0 +1,110 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from ....core.strategy import load_settings
+from ....ingestion.stages.storage.sqlite import SqliteStore
+from ...jsonrpc.codec import INVALID_PARAMS
+from ...jsonrpc.dispatcher import JsonRpcAppError
+from ..session import McpSession
+from .base import FunctionTool, ToolSpec
+
+
+@dataclass
+class DeleteDocumentToolConfig:
+    settings_path: str | Path = "config/settings.yaml"
+
+
+def make_tool(*, cfg: DeleteDocumentToolConfig | None = None) -> FunctionTool:
+    cfg = cfg or DeleteDocumentToolConfig()
+
+    def _handler(session: McpSession, args: dict[str, Any]) -> dict[str, Any]:
+        _ = session
+        doc_id = args.get("doc_id")
+        if not isinstance(doc_id, str) or not doc_id:
+            raise JsonRpcAppError(INVALID_PARAMS, "missing required param: doc_id")
+
+        version_id = args.get("version_id")
+        if version_id is not None and (not isinstance(version_id, str) or not version_id):
+            raise JsonRpcAppError(INVALID_PARAMS, "invalid param: version_id must be non-empty string")
+
+        mode = args.get("mode", "soft")
+        if not isinstance(mode, str) or mode not in {"soft", "hard"}:
+            raise JsonRpcAppError(INVALID_PARAMS, "invalid param: mode must be soft|hard")
+        if mode != "soft":
+            raise JsonRpcAppError(INVALID_PARAMS, "hard delete is not enabled in E-9")
+
+        reason = args.get("reason")
+        if reason is not None and not isinstance(reason, str):
+            raise JsonRpcAppError(INVALID_PARAMS, "invalid param: reason must be string")
+
+        dry_run = bool(args.get("dry_run", False))
+
+        settings = load_settings(cfg.settings_path)
+        sqlite = SqliteStore(db_path=settings.paths.sqlite_dir / "app.sqlite")
+
+        affected = {"sqlite": {"versions_marked": 0, "chunks_affected": 0}, "chroma": {}, "fts5": {}, "fs": {}}
+        warnings: list[str] = []
+
+        if dry_run:
+            # Best-effort preview.
+            affected["sqlite"] = sqlite.preview_delete(doc_id=doc_id, version_id=version_id)  # type: ignore[assignment]
+            warnings.append("dry_run_preview_only")
+        else:
+            affected["sqlite"] = sqlite.mark_deleted(doc_id=doc_id, version_id=version_id)  # type: ignore[assignment]
+
+        st = "ok" if affected["sqlite"]["versions_marked"] > 0 else "noop"
+
+        target = {"doc_id": doc_id}
+        if version_id:
+            target["version_id"] = version_id
+
+        if version_id:
+            deleted = {"doc_id": doc_id, "version_ids": [version_id]}
+        else:
+            # Enumerate impacted versions for admin UI (soft delete semantics).
+            deleted = {"doc_id": doc_id, "version_ids": sqlite.fetch_doc_version_ids(doc_id=doc_id, include_deleted=True)}
+
+        text_lines = [
+            "Delete (soft) finished.",
+            f"- status: {st}",
+            f"- doc_id: {doc_id}",
+            f"- version_id: {version_id or '(all)'}",
+            f"- dry_run: {dry_run}",
+        ]
+        if reason:
+            text_lines.append(f"- reason: {reason}")
+
+        return {
+            "text": "\n".join(text_lines),
+            "structured": {
+                "status": st,
+                "mode": mode,
+                "target": target,
+                "deleted": deleted,
+                "affected": affected,
+                "warnings": warnings,
+            },
+        }
+
+    return FunctionTool(
+        spec=ToolSpec(
+            name="library.delete_document",
+            description="Soft delete a document (or a specific version).",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "doc_id": {"type": "string"},
+                    "version_id": {"type": "string"},
+                    "mode": {"type": "string"},
+                    "reason": {"type": "string"},
+                    "dry_run": {"type": "boolean"},
+                },
+                "required": ["doc_id"],
+                "additionalProperties": False,
+            },
+        ),
+        fn=_handler,
+    )

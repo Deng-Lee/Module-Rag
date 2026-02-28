@@ -149,6 +149,144 @@ class SqliteStore:
         with self._connect() as conn:
             conn.execute("UPDATE doc_versions SET status=? WHERE version_id=?", (status, version_id))
 
+    def fetch_version_statuses(self, version_ids: list[str]) -> dict[str, str]:
+        if not version_ids:
+            return {}
+        placeholders = ",".join(["?"] * len(version_ids))
+        sql = f"SELECT version_id, status FROM doc_versions WHERE version_id IN ({placeholders})"
+        with self._connect() as conn:
+            rows = conn.execute(sql, tuple(version_ids)).fetchall()
+        out: dict[str, str] = {}
+        for r in rows:
+            out[str(r["version_id"])] = str(r["status"] or "")
+        return out
+
+    def mark_deleted(self, *, doc_id: str, version_id: str | None = None) -> dict[str, Any]:
+        """Soft delete by setting doc_versions.status='deleted'.
+
+        Returns minimal affected counts for observability.
+        """
+        with self._connect() as conn:
+            if version_id:
+                row = conn.execute(
+                    "SELECT COUNT(*) AS c FROM doc_versions WHERE doc_id=? AND version_id=? AND status!='deleted'",
+                    (doc_id, version_id),
+                ).fetchone()
+                versions_marked = int(row["c"] if row else 0)
+                conn.execute(
+                    "UPDATE doc_versions SET status='deleted' WHERE doc_id=? AND version_id=? AND status!='deleted'",
+                    (doc_id, version_id),
+                )
+            else:
+                row = conn.execute(
+                    "SELECT COUNT(*) AS c FROM doc_versions WHERE doc_id=? AND status!='deleted'",
+                    (doc_id,),
+                ).fetchone()
+                versions_marked = int(row["c"] if row else 0)
+                conn.execute(
+                    "UPDATE doc_versions SET status='deleted' WHERE doc_id=? AND status!='deleted'",
+                    (doc_id,),
+                )
+
+            # Count chunks under the target scope (best-effort; not a physical delete in E-9).
+            if version_id:
+                row = conn.execute(
+                    "SELECT COUNT(*) AS c FROM chunks WHERE doc_id=? AND version_id=?",
+                    (doc_id, version_id),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT COUNT(*) AS c FROM chunks WHERE doc_id=?",
+                    (doc_id,),
+                ).fetchone()
+            chunks_affected = int(row["c"] if row else 0)
+
+        return {"versions_marked": versions_marked, "chunks_affected": chunks_affected}
+
+    def preview_delete(self, *, doc_id: str, version_id: str | None = None) -> dict[str, Any]:
+        """Compute the affected counts of a soft delete without modifying DB."""
+        with self._connect() as conn:
+            if version_id:
+                row = conn.execute(
+                    "SELECT COUNT(*) AS c FROM doc_versions WHERE doc_id=? AND version_id=? AND status!='deleted'",
+                    (doc_id, version_id),
+                ).fetchone()
+                versions_marked = int(row["c"] if row else 0)
+                row2 = conn.execute(
+                    "SELECT COUNT(*) AS c FROM chunks WHERE doc_id=? AND version_id=?",
+                    (doc_id, version_id),
+                ).fetchone()
+                chunks_affected = int(row2["c"] if row2 else 0)
+            else:
+                row = conn.execute(
+                    "SELECT COUNT(*) AS c FROM doc_versions WHERE doc_id=? AND status!='deleted'",
+                    (doc_id,),
+                ).fetchone()
+                versions_marked = int(row["c"] if row else 0)
+                row2 = conn.execute(
+                    "SELECT COUNT(*) AS c FROM chunks WHERE doc_id=?",
+                    (doc_id,),
+                ).fetchone()
+                chunks_affected = int(row2["c"] if row2 else 0)
+        return {"versions_marked": versions_marked, "chunks_affected": chunks_affected}
+
+    def fetch_doc_version_ids(self, *, doc_id: str, include_deleted: bool = True) -> list[str]:
+        where = "WHERE doc_id=?"
+        params: list[Any] = [doc_id]
+        if not include_deleted:
+            where += " AND status!='deleted'"
+        sql = f"SELECT version_id FROM doc_versions {where} ORDER BY created_at DESC"
+        with self._connect() as conn:
+            rows = conn.execute(sql, tuple(params)).fetchall()
+        return [str(r["version_id"]) for r in rows]
+
+    def list_doc_versions(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        include_deleted: bool = False,
+        doc_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        if limit <= 0:
+            return []
+        if offset < 0:
+            offset = 0
+
+        where: list[str] = []
+        params: list[Any] = []
+        if doc_id:
+            where.append("doc_id=?")
+            params.append(doc_id)
+        if not include_deleted:
+            where.append("status!='deleted'")
+        where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+
+        sql = f"""
+            SELECT doc_id, version_id, file_sha256, status, created_at
+            FROM doc_versions
+            {where_sql}
+            ORDER BY created_at DESC
+            LIMIT ? OFFSET ?
+        """
+        params.extend([limit, offset])
+
+        with self._connect() as conn:
+            rows = conn.execute(sql, tuple(params)).fetchall()
+
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            out.append(
+                {
+                    "doc_id": str(r["doc_id"]),
+                    "version_id": str(r["version_id"]),
+                    "file_sha256": str(r["file_sha256"] or ""),
+                    "status": str(r["status"] or ""),
+                    "created_at": float(r["created_at"] or 0.0),
+                }
+            )
+        return out
+
     def upsert_asset(self, asset_id: str, rel_path: str | None = None) -> None:
         ts = time.time()
         with self._connect() as conn:

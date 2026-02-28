@@ -54,7 +54,9 @@ class ContextBuildStage:
         ranked: list[RankedCandidate],
     ) -> ContextBundle:
         _ = q
-        _ = params
+        include_deleted = False
+        if params.filters and isinstance(params.filters, dict):
+            include_deleted = bool(params.filters.get("include_deleted", False))
         if not ranked:
             return ContextBundle(chunks=[], citations_md="", debug={"count": 0})
 
@@ -62,12 +64,22 @@ class ContextBuildStage:
         rows = runtime.sqlite.fetch_chunks(chunk_ids)
         by_id = {r.chunk_id: r for r in rows}
         assets_by_chunk = runtime.sqlite.fetch_chunk_assets(chunk_ids)
+        statuses_by_version: dict[str, str] = {}
+        if not include_deleted:
+            version_ids = sorted({r.version_id for r in rows if r.version_id})
+            statuses_by_version = runtime.sqlite.fetch_version_statuses(version_ids)
 
         out_chunks: list[ContextChunk] = []
         footnotes: list[str] = []
+        dropped_deleted = 0
 
         for i, r in enumerate(ranked, start=1):
             row = by_id.get(r.chunk_id)
+            if row is not None and not include_deleted:
+                st = statuses_by_version.get(row.version_id, "")
+                if st == "deleted":
+                    dropped_deleted += 1
+                    continue
             chunk_text = row.chunk_text if row else ""
             excerpt = _make_excerpt(chunk_text, self.excerpt_max_chars)
             citation_id = f"[{i}]"
@@ -106,13 +118,18 @@ class ContextBuildStage:
             {
                 "count": len(out_chunks),
                 "asset_refs": int(sum(len(c.asset_ids) for c in out_chunks)),
+                "dropped_deleted": dropped_deleted,
             },
         )
 
         return ContextBundle(
             chunks=out_chunks,
             citations_md=citations_md,
-            debug={"count": len(out_chunks), "missing_rows": max(0, len(ranked) - len(rows))},
+            debug={
+                "count": len(out_chunks),
+                "missing_rows": max(0, len(ranked) - len(rows)),
+                "dropped_deleted": dropped_deleted,
+            },
         )
 
 
@@ -124,4 +141,3 @@ def _make_excerpt(text: str, max_chars: int) -> str:
     if len(s) <= max_chars:
         return s
     return s[:max_chars].rstrip() + "…"
-
