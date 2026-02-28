@@ -4799,14 +4799,14 @@ B) Dashboard（Web）
 
 6. **E-6 Tools：library.query（对接 QueryRunner/QueryPipeline）**
 
-目的：实现 `library.query` 工具：调用 `core.runners.query`，返回 answer + citations + chunk_ids + asset_ids（不返回 base64）。
+目的：实现 `library.query` 工具：调用 `core.runners.query.QueryRunner`，返回 answer markdown + citations + chunk_ids + asset_ids（不返回 base64）。
 
-修改/新增文件（可见变化）：`src/mcp_server/mcp/tools/query.py`。
+修改/新增文件（可见变化）：`src/mcp_server/mcp/tools/query.py`、`src/mcp_server/_test_mcp_ingest_query_entrypoint.py`、`tests/integration/test_mcp_query_stdio.py`。
 
 实现函数（最小集合）：
 
-* `tool_query(session, args) -> ToolResult`
-* `normalize_query_input(args) -> QueryInput`
+* `normalize_query_input(args, cfg) -> (query, strategy_config_id, top_k, filters?)`
+* `make_tool(runner, cfg?) -> Tool`
 
 验收标准：
 
@@ -5736,7 +5736,7 @@ B) Dashboard（Web）
 | E-3 | MCP 协议语义层：tools/list + tools/call | 完成 | 2026-02-27 | `McpProtocol.handle_initialize/tools_list/tools_call`、ToolRegistry |
 | E-4 | Schema + L0/L1/L2 Envelope | 完成 | 2026-02-27 | `validate_tool_args`（最小 JSON Schema 子集）、`build_response_envelope`（text-first）、`degrade`（L0/L1/L2） |
 | E-5 | Tool：library.ingest | 完成 | 2026-02-27 | `normalize_ingest_input/make_tool`、`IngestRunner.run`、JSON-RPC e2e（stdio） |
-| E-6 | Tool：library.query | 未完成 |  | `tool_query`→`QueryRunner.run` |
+| E-6 | Tool：library.query | 完成 | 2026-02-27 | `normalize_query_input/make_tool`、`QueryRunner.run`、ingest→query stdio e2e |
 | E-7 | Tools：query_assets/get_document（资源旁路） | 未完成 |  | 批量 thumb、facts md 回读 |
 | E-8 | 错误映射 + 超时/取消预留 | 未完成 |  | `map_exception_to_*`、`with_deadline` |
 | E-9 | 管理类 Tools：list/delete | 未完成 |  | `tool_list_documents/tool_delete_document` + 过滤召回 |

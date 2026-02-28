@@ -60,7 +60,11 @@ def _build_query_runtime(strategy_config_id: str, *, settings_path: str | Path) 
     llm = make_llm(cfg, registry)
 
     vec_provider_id, vec_params = strategy.resolve_provider("vector_index")
-    vector_index = registry.create("vector_index", vec_provider_id, vec_params)
+    vec_kwargs = dict(vec_params or {})
+    # Keep vector store location aligned to settings paths (important for local tests and MCP tools).
+    if vec_provider_id == "vector.chroma_lite" and "db_path" not in vec_kwargs:
+        vec_kwargs["db_path"] = str(settings.paths.chroma_dir / "chroma_lite.sqlite")
+    vector_index = registry.create("vector_index", vec_provider_id, **vec_kwargs)
 
     # Dense retriever: injected with embedder + vector_index.
     try:
