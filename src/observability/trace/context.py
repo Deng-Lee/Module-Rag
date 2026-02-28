@@ -121,10 +121,20 @@ class TraceContext:
 
         end_ts = _now()
         spans = [self._spans_by_id[sid] for sid in self._span_order if sid in self._spans_by_id]
-        return TraceEnvelope(
+        envelope = TraceEnvelope(
             trace_id=self.trace_id,
             start_ts=self.start_ts,
             end_ts=end_ts,
             spans=spans,
             events=list(self._trace_events),
         )
+        # Best-effort: notify observability sink, if configured.
+        try:
+            from ..obs import api as obs
+
+            sink = obs.get_sink()
+            if sink is not None:
+                sink.on_trace_end(envelope)
+        except Exception:
+            pass
+        return envelope

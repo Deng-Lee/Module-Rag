@@ -1964,23 +1964,22 @@ MCP Server 对外暴露的是稳定的资源模型，而非内部数据库结构
 
 #### 3.3.2 Tool 契约层（Tools & Schemas）
 
-本系统当前版本对外暴露核心 Tool，构成“私人图书馆”最小能力闭环。
+本系统当前版本对外暴露 Tool，构成“私人图书馆”最小能力闭环，并补齐最小管理操作流（list/delete）。
 
 | Tool 名称                      | 核心职责                        | 主要输入字段（摘要）                                                       | 主要输出字段（摘要）                                                                                                               | 依赖内部模块        |
 | ---------------------------- | --------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------- |
-| `library.query`              | 基础查询检索，返回文本片段及出处            | `query`、`top_k?`、`filters?`（doc_id / tags / source / version_id） | `markdown`、`results[{chunk_id, text_snippet, citation{doc_id, version_id, section_path, page_range?}, asset_ids?, asset_uris?}]`、`trace_id`、`effective_mode` | 3.2 查询路径      |
-| `library.list_documents`     | 按 tags/categories 列出当前管理的文档 | `group_by?`（默认 tags）、`filter?`（tags / source / status）、`limit?`  | `markdown`、`groups[{key, count, documents[{doc_id, filename, tags, updated_at, status}]}]` 或 `documents[]`、`trace_id`    | SQLite 元数据层   |
-| `library.summarize_document` | 对指定文档生成摘要                   | `doc_id`、`version_id?`、`style?`（short / bullet / detailed）       | `markdown`、`doc_id`、`version_id?`、`summary`、`trace_id`                                                                   | 3.2 检索 + 生成路径 |
-| `library.get_document`       | 获取文档内容与结构化溯源信息              | `doc_id`、`version_id?`、`format?`（md / sections / chunks）、`max_chars?`、`include_summary?`、`summary_style?` | `markdown`、`document{doc_id, version_id, md_text?/sections?/chunks?, asset_ids?}`、`summary?`、`trace_id`                  | SQLite + 文档事实层 |
-| `library.query_assets`       | 批量获取资源（默认缩略图）               | `asset_ids[]`、`variant?`（thumb / raw）、`max_bytes?`               | `markdown`、`assets[{asset_id, variant, mime, blob_base64, width?, height?}]`、`trace_id`                                    | 资产归一化产物 + SQLite |
+| `library.ingest`             | 离线摄取文档（落盘/落库/建索引）           | `file_path`、`policy?`（skip/new_version/continue）、`strategy_config_id?` | `markdown`（可读摘要） + `structured{status, doc_id, version_id, counts, file_sha256}` + `trace_id`                           | 3.1 Ingestion |
+| `library.query`              | 在线查询检索，返回答案与出处               | `query`、`top_k?`、`filters?`（可选 include_deleted）                 | `markdown`（Answer + Retrieved + Citations） + `sources[]`（chunk_id/doc_id/version_id/asset_ids/…） + `trace_id`            | 3.2 查询路径      |
+| `library.get_document`       | 回读事实层 md（点击来源打开文档）          | `doc_id`、`version_id`、`max_chars?`                                | `markdown`（facts md） + `structured{doc_id, version_id, warnings[]}` + `trace_id`                                            | FS(md) + SQLite |
+| `library.query_assets`       | 批量获取资源（默认缩略图）               | `asset_ids[]`、`variant?`（thumb/raw）、`max_bytes?`                | `markdown`（拉取摘要） + `structured{assets[], missing[], too_large[]}` + `trace_id`                                           | FS(assets) + SQLite |
+| `library.list_documents`     | 管理枚举：列出 doc/version 列表       | `limit?`、`offset?`、`include_deleted?`、`doc_id?`                  | `markdown`（列表摘要） + `structured{items[], limit, offset, include_deleted}` + `trace_id`                                     | SQLite 元数据层   |
+| `library.delete_document`    | 管理删除：软删 doc/version（默认）      | `doc_id`、`version_id?`、`mode?`（soft/hard）、`dry_run?`、`reason?`   | `markdown`（执行摘要） + `structured{status, deleted{version_ids[]}, affected, warnings[]}` + `trace_id`                       | SQLite（E-9）+ 统一回收（E-11） |
 
 设计说明：
 
-* 分类统一采用显式 `tags/categories` 字段，不使用隐式或自动分类作为主分类依据；
-* `library.query` 仅负责“查询 + 溯源返回”，不承担文档管理功能；
-* `library.list_documents` 仅基于结构化元数据执行，不触发向量检索；
-* `library.summarize_document` 在语义上属于“基于指定资源的理解能力”，不依赖 QueryIR 意图解析；
-* `library.get_document` 默认不强制调用 LLM；如需“文档摘要 + 全文”体验，通过 `include_summary` 显式开启，避免读取全文时引入额外成本与失败面；
+* `library.query` 仅负责“查询 + 溯源返回”，不承担管理写操作；
+* `library.list_documents/delete_document` 仅基于 SQLite 元数据执行（E-9 默认为软删 + 读路径过滤；物理回收在 E-11 固化）；
+* `library.get_document` 仅回读事实层 md，不默认引入 LLM 生成（摘要类 tool 作为后续扩展点，不属于当前最小闭环）；
 * 所有 Tool 均通过统一 Response Envelope 返回（详见 3.3.4）。
 
 该设计保证：
@@ -2017,20 +2016,14 @@ MCP Server 对外暴露的是稳定的资源模型，而非内部数据库结构
   * 支持 `max_bytes` 与 `variant`，并对单次返回做大小上限与失败降级（例如返回缺失列表）；
   * 资源来自资产归一化落盘路径（3.1.4），并携带 `mime` 与可选尺寸信息。
 
-##### 3.3.2.2 文档读取与“摘要 + 全文”（`library.get_document`）
+##### 3.3.2.2 文档读取（`library.get_document`）
 
 `library.get_document` 用于在 MCP Client 侧实现“点击来源 → 打开文档”的体验，返回文档内容或其结构化投影，并携带可溯源信息。
 
-**为什么不与 `library.summarize_document` 合并为一个 Tool**
+**摘要能力的处理（扩展点，当前不实现）**
 
-* 成本与失败面：读取全文属于 I/O 操作；摘要属于 LLM 生成操作。合并后会导致每次取文档都默认引入 LLM 成本与超时/失败面；
-* 语义清晰：`get_document` 的职责是“读取与结构化展示”，`summarize_document` 的职责是“理解与压缩”。二者分离更符合契约优先与可回放原则；
-* 可控性：通过 `include_summary` 显式开启“摘要 + 全文”，既满足体验，又保持默认路径的稳定与可预测。
-
-**推荐调用方式**
-
-* 仅取全文/结构：`include_summary=false`（默认）
-* 取“摘要 + 全文”：`include_summary=true` 且 `summary_style` 指定输出风格
+* 读取全文属于 I/O 操作；摘要属于 LLM 生成操作。为降低默认路径的失败面与成本，当前版本 `get_document` 不自动触发摘要；
+* 后续若引入 `library.summarize_document`（或 `include_summary` 扩展），应保持“显式开启 + 明确成本/超时/降级策略”的契约约束（与 3.2 的 generate 回退保持一致）。
 
 #### 3.3.3 三层实现形态与数据流（Transport Adapter / MCP 协议层 / 执行层）
 
@@ -4935,7 +4928,7 @@ Tool 契约（List）：`library.list_documents`
 
 目的：补齐“真正能跑起来”的装配入口：从配置加载开始，完成 registry/factories/runtime 的构建，接入 observability sinks，并把 MCP 协议 handler 交给 stdio transport 运行。该装配层必须对未来替换 transport（HTTP adapter）保持无感。
 
-修改/新增文件（可见变化）：`src/mcp_server/entry.py`、（可选）`src/mcp_server/mcp/protocol.py`（补齐装配入口）、`src/mcp_server/mcp/session.py`（会话默认值/level 解析）、`config/settings.yaml`（补齐 server/dashboard 端口与路径项）。
+修改/新增文件（可见变化）：`src/mcp_server/entry.py`、`tests/integration/test_mcp_entry_stdio.py`、（可选）`src/mcp_server/mcp/session.py`（会话默认值/level 解析）、`config/settings.yaml`（补齐 server/dashboard 端口与路径项）。
 
 实现函数（最小集合）：
 
@@ -5786,7 +5779,7 @@ Tool 契约（List）：`library.list_documents`
 | E-7 | Tools：query_assets/get_document（资源旁路） | 完成 | 2026-02-27 | `library.query_assets/library.get_document` + ingest→query→assets stdio e2e |
 | E-8 | 错误映射 + 超时/取消预留 | 完成 | 2026-02-27 | `map_exception_to_jsonrpc`、`McpSession.with_deadline/new_call`、timeout_ms 透传与 deadline exceeded |
 | E-9 | 管理类 Tools：list/delete | 完成 | 2026-02-27 | `library.list_documents/library.delete_document`（软删）+ Query 默认过滤 deleted |
-| E-10 | MCP Server 启动入口装配（entry wiring） | 未完成 |  | `build_runtime/build_observability/serve_stdio` |
+| E-10 | MCP Server 启动入口装配（entry wiring） | 完成 | 2026-02-27 | `entry.py` 装配 + jsonl sink + stdio 入口 |
 | E-11 | 删除一致性与回收策略（跨存储统一口径） | 未完成 |  | `AdminRunner.delete_document` + Chroma/FTS5/FS 一致处理 |
 
 #### 6.4.6 阶段 F

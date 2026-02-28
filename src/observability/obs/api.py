@@ -25,6 +25,10 @@ def set_sink(sink: ObsSink | None) -> None:
     _SINK = sink
 
 
+def get_sink() -> ObsSink | None:
+    return _SINK
+
+
 def _current() -> TraceContext | None:
     return TraceContext.current()
 
