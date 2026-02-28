@@ -35,7 +35,7 @@ class QueryRunner:
         top_k: int = 5,
         filters: dict | None = None,
     ) -> ResponseIR:
-        ctx = TraceContext.new()
+        ctx = TraceContext.new(trace_type="query", strategy_config_id=strategy_config_id)
         with TraceContext.activate(ctx):
             runtime = (
                 self.runtime_builder(strategy_config_id)

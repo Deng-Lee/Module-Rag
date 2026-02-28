@@ -1,11 +1,26 @@
 {
-  "title": "TraceEnvelope",
+  "title": "TraceEnvelopeV1",
   "type": "object",
-  "required": ["trace_id", "start_ts", "end_ts", "spans", "events"],
+  "required": [
+    "schema_version",
+    "trace_id",
+    "trace_type",
+    "status",
+    "start_ts",
+    "end_ts",
+    "strategy_config_id",
+    "spans",
+    "events",
+    "aggregates"
+  ],
   "properties": {
+    "schema_version": { "type": "string" },
     "trace_id": { "type": "string" },
+    "trace_type": { "type": "string" },
+    "status": { "type": "string" },
     "start_ts": { "type": "number" },
     "end_ts": { "type": "number" },
+    "strategy_config_id": { "type": "string" },
     "spans": {
       "type": "array",
       "items": { "type": "object" }
@@ -13,7 +28,7 @@
     "events": {
       "type": "array",
       "items": { "type": "object" }
-    }
+    },
+    "aggregates": { "type": "object" }
   }
 }
-

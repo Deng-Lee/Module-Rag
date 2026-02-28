@@ -38,7 +38,7 @@ class IngestionPipeline:
         strategy_config_id: str,
         on_progress: ProgressCallback | None = None,
     ) -> IngestResult:
-        ctx = TraceContext.new()
+        ctx = TraceContext.new(trace_type="ingestion", strategy_config_id=strategy_config_id)
         with TraceContext.activate(ctx):
             data = input_data
             total = len(self._stages) if self._stages else 1

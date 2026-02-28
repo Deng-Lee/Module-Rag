@@ -4159,6 +4159,19 @@ B) Dashboard（Web）
 * 单测：NoopReranker 不改变排序且不抛异常。
 * 单测：`register_builtin_providers` 可注册并创建实例。
 
+**Fake/Dev-Only 组件清单 + 替换路径**
+
+| 组件（Provider ID / 类） | 位置 | 用途（仅开发/测试） | 真实替换路径（示例） |
+| --- | --- | --- | --- |
+| `llm.fake` / `FakeLLM` | `src/libs/providers/llm/fake_llm.py` | 本地无外部 API 生成，占位回答/回显 | `llm.openai_compatible` / `llm.anthropic` / `llm.deepseek` / `llm.ollama` / `llm.vllm` |
+| `embedder.fake` / `FakeEmbedder` | `src/libs/providers/embedding/fake_embedder.py` | deterministic 向量，便于单测与闭环 | 真实 embedding provider（OpenAI/Azure/本地 bge 系列等） |
+| `embedder.bow` / `BowHashEmbedder` | `src/libs/providers/embedding/bow_embedder.py` | 测试用简化稀疏向量/词袋近似 | 真实 sparse encoder 或 BM25/FTS5 方案 |
+| `vector.in_memory` / `InMemoryVectorIndex` | `src/libs/providers/vector_store/in_memory.py` | 内存向量库，便于单测 | `vector.chroma`（默认）/ `vector.qdrant` / `vector.milvus` / `vector.weaviate` |
+| `vector.chroma_lite` / `ChromaLiteVectorIndex` | `src/libs/providers/vector_store/chroma_lite.py` | 轻量本地持久化替身 | 真实 `Chroma`（persist_directory） |
+| `reranker.noop` / `NoopReranker` | `src/libs/providers/reranker/noop.py` | 不改排序，验证链路 | 真实重排模型（如 bge-reranker / Cohere Rerank / LLM rerank） |
+| `NoopEnricher` | `src/ingestion/stages/transform/transform_post.py` | 跳过 OCR/Caption/关键词增强 | OCR + Caption provider（如 GPT-4o / Qwen-VL / Gemini Pro Vision 等） |
+| `NoopProvider` | `src/libs/factories/common.py` | 未配置 provider 的兜底占位 | 生产环境应移除兜底并显式配置 |
+
 5. **B-5 Strategy 展开到工厂输入（最小贯通）**
 
 目的：让 `core/strategy/*` 输出的配置结构能直接驱动工厂装配（不必等到完整 ingestion/query 才发现“配置落不下来”）。
@@ -5786,7 +5799,7 @@ Tool 契约（List）：`library.list_documents`
 
 | 任务编号 | 任务名称 | 状态 | 完成日期 | 备注（关键实现） |
 |---|---|---|---|---|
-| F-1 | 稳定契约：stage.* + event.kind + schema | 未完成 |  | `trace_envelope.json` 版本化 + 校验 |
+| F-1 | 稳定契约：stage.* + event.kind + schema | 完成 | 2026-02-28 | `TraceEnvelope.validate` + `trace_envelope.json` 升级 + stage/event 稳定约束 |
 | F-2 | Runner 自动包裹：stage span + 关键事件 | 未完成 |  | `with_stage`、`emit_stage_summary` |
 | F-3 | Provider 归因快照 | 未完成 |  | `ProviderMeta`、`providers_snapshot` |
 | F-4 | aggregates 生成 | 未完成 |  | `compute_aggregates`、timing/counter |

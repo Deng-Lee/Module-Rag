@@ -8,7 +8,13 @@ import traceback
 import uuid
 from typing import Any, Iterator
 
-from .envelope import EventRecord, SpanRecord, TraceEnvelope
+from .envelope import (
+    EventRecord,
+    SpanRecord,
+    TraceEnvelope,
+    new_event,
+    new_span,
+)
 
 
 _CTX: contextvars.ContextVar["TraceContext | None"] = contextvars.ContextVar(
@@ -28,14 +34,27 @@ def _new_id(prefix: str) -> str:
 class TraceContext:
     trace_id: str
     start_ts: float
+    trace_type: str = "unknown"
+    strategy_config_id: str = "unknown"
     _spans_by_id: dict[str, SpanRecord] = field(default_factory=dict)
     _span_stack: list[str] = field(default_factory=list)
     _span_order: list[str] = field(default_factory=list)
     _trace_events: list[EventRecord] = field(default_factory=list)
 
     @classmethod
-    def new(cls, trace_id: str | None = None) -> "TraceContext":
-        return cls(trace_id=trace_id or _new_id("trace"), start_ts=_now())
+    def new(
+        cls,
+        trace_id: str | None = None,
+        *,
+        trace_type: str = "unknown",
+        strategy_config_id: str = "unknown",
+    ) -> "TraceContext":
+        return cls(
+            trace_id=trace_id or _new_id("trace"),
+            trace_type=trace_type,
+            strategy_config_id=strategy_config_id,
+            start_ts=_now(),
+        )
 
     @classmethod
     def current(cls) -> "TraceContext | None":
@@ -62,7 +81,7 @@ class TraceContext:
     def start_span(self, name: str, attrs: dict[str, Any] | None = None) -> Iterator[SpanRecord]:
         span_id = _new_id("span")
         parent = self._span_stack[-1] if self._span_stack else None
-        s = SpanRecord(
+        s = new_span(
             span_id=span_id,
             name=name,
             parent_span_id=parent,
@@ -94,7 +113,7 @@ class TraceContext:
             s.end_ts = _now()
 
     def add_event(self, kind: str, attrs: dict[str, Any] | None = None) -> EventRecord:
-        ev = EventRecord(ts=_now(), kind=kind, attrs=dict(attrs or {}))
+        ev = new_event(kind, attrs, ts=_now(), strict=False)
         cur = self._current_span()
         if cur is None:
             self._trace_events.append(ev)
@@ -121,12 +140,17 @@ class TraceContext:
 
         end_ts = _now()
         spans = [self._spans_by_id[sid] for sid in self._span_order if sid in self._spans_by_id]
+        status = "error" if any(s.status == "error" for s in spans) else "ok"
         envelope = TraceEnvelope(
             trace_id=self.trace_id,
+            trace_type=self.trace_type,
+            status=status,
             start_ts=self.start_ts,
             end_ts=end_ts,
+            strategy_config_id=self.strategy_config_id,
             spans=spans,
             events=list(self._trace_events),
+            aggregates={},
         )
         # Best-effort: notify observability sink, if configured.
         try:

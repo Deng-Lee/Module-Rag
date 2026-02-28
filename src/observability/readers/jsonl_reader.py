@@ -29,11 +29,16 @@ def _envelope_from_dict(d: dict[str, Any]) -> TraceEnvelope:
     spans = [_span_from_dict(s) for s in d.get("spans", [])]
     events = [_event_from_dict(e) for e in d.get("events", [])]
     return TraceEnvelope(
+        schema_version=str(d.get("schema_version", "trace.v1")),
         trace_id=str(d["trace_id"]),
+        trace_type=str(d.get("trace_type", "unknown")),
+        status=str(d.get("status", "ok")),
         start_ts=float(d["start_ts"]),
         end_ts=float(d["end_ts"]),
+        strategy_config_id=str(d.get("strategy_config_id", "unknown")),
         spans=spans,
         events=events,
+        aggregates=dict(d.get("aggregates", {})),
     )
 
 
