@@ -5800,7 +5800,7 @@ Tool 契约（List）：`library.list_documents`
 | 任务编号 | 任务名称 | 状态 | 完成日期 | 备注（关键实现） |
 |---|---|---|---|---|
 | F-1 | 稳定契约：stage.* + event.kind + schema | 完成 | 2026-02-28 | `TraceEnvelope.validate` + `trace_envelope.json` 升级 + stage/event 稳定约束 |
-| F-2 | Runner 自动包裹：stage span + 关键事件 | 未完成 |  | `with_stage`、`emit_stage_summary` |
+| F-2 | Runner 自动包裹：stage span + 关键事件 | 完成 | 2026-02-28 | `with_stage`、`emit_stage_summary` + pipeline 统一接入 |
 | F-3 | Provider 归因快照 | 未完成 |  | `ProviderMeta`、`providers_snapshot` |
 | F-4 | aggregates 生成 | 未完成 |  | `compute_aggregates`、timing/counter |
 | F-5 | SQLite sink + readers（不重复存储） | 未完成 |  | `SqliteTraceSink/Reader` 分页/过滤 |

@@ -113,3 +113,46 @@ def metric(name: str, value: float | int, attrs: dict[str, Any] | None = None) -
                 "attrs": attrs or {},
             }
         )
+
+
+def _normalize_stage_name(stage_name: str) -> str:
+    name = (stage_name or "").strip()
+    if name.startswith("stage."):
+        return name[len("stage.") :]
+    return name
+
+
+@contextmanager
+def with_stage(
+    stage_name: str,
+    attrs: dict[str, Any] | None = None,
+    summary: dict[str, Any] | None = None,
+) -> Iterator[SpanRecord | None]:
+    """
+    Wrap a pipeline stage with a stable span + stage.start/end/error events.
+    """
+    stage_key = _normalize_stage_name(stage_name)
+    span_attrs = {"stage": stage_key}
+    if attrs:
+        span_attrs.update(attrs)
+
+    with span(f"stage.{stage_key}", span_attrs) as s:
+        event("stage.start", {"stage": stage_key, **(attrs or {})})
+        try:
+            yield s
+        except Exception as e:
+            event(
+                "stage.error",
+                {"stage": stage_key, "message": str(e), "exc_type": type(e).__name__},
+            )
+            raise
+        finally:
+            end_attrs = {"stage": stage_key}
+            if summary:
+                end_attrs.update(summary)
+            event("stage.end", end_attrs)
+
+
+def emit_stage_summary(stage_name: str, summary: dict[str, Any]) -> None:
+    stage_key = _normalize_stage_name(stage_name)
+    event("stage.end", {"stage": stage_key, **(summary or {})})

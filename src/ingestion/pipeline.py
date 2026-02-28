@@ -87,10 +87,8 @@ class IngestionPipeline:
         if on_progress is not None:
             on_progress(stage_name, percent_start, "start", {"index": index, "total": total})
 
-        obs.event("stage.start", {"stage": stage_name, "index": index, "total": total})
-
         try:
-            with obs.span(f"stage.{stage_name}", {"stage": stage_name}):
+            with obs.with_stage(stage_name, {"index": index, "total": total}):
                 ctx = StageContext(
                     strategy_config_id=strategy_config_id,
                     trace_id=TraceContext.current().trace_id if TraceContext.current() else "",
@@ -98,10 +96,8 @@ class IngestionPipeline:
                 )
                 output = stage.fn(data, ctx)
         except Exception as e:
-            obs.event("stage.error", {"stage": stage_name, "message": str(e)})
             raise StageExecutionError(stage_name, str(e)) from e
         finally:
-            obs.event("stage.end", {"stage": stage_name})
             if on_progress is not None:
                 on_progress(stage_name, percent_end, "end", {"index": index, "total": total})
 

@@ -37,32 +37,32 @@ class QueryPipeline:
     def run(self, query: str, *, runtime: QueryRuntime, params: QueryParams) -> ResponseIR:
         trace_id = TraceContext.current().trace_id if TraceContext.current() else ""
 
-        with obs.span("stage.query_norm", {"stage": "query_norm"}):
+        with obs.with_stage("query_norm"):
             q = query_norm(query)
 
-        with obs.span("stage.retrieve_dense", {"stage": "retrieve_dense"}):
+        with obs.with_stage("retrieve_dense", {"top_k": params.top_k}):
             dense = self.retrieve_dense.run(q, runtime, params)
             _emit_candidates_event("dense", dense, top_k=params.top_k)
 
-        with obs.span("stage.retrieve_sparse", {"stage": "retrieve_sparse"}):
+        with obs.with_stage("retrieve_sparse", {"top_k": params.top_k}):
             sparse = self.retrieve_sparse.run(q, runtime, params)
             _emit_candidates_event("sparse", sparse, top_k=params.top_k)
 
         candidates_by_source = {"dense": dense, "sparse": sparse}
-        with obs.span("stage.fusion", {"stage": "fusion"}):
+        with obs.with_stage("fusion"):
             ranked = self.fusion.run(runtime=runtime, params=params, candidates_by_source=candidates_by_source)
             _emit_ranked_event(ranked, top_k=params.top_k)
 
-        with obs.span("stage.rerank", {"stage": "rerank"}):
+        with obs.with_stage("rerank"):
             ranked = self.rerank.run(q=q, runtime=runtime, params=params, ranked=ranked)
 
-        with obs.span("stage.context_build", {"stage": "context_build"}):
+        with obs.with_stage("context_build"):
             bundle = self.context_build.run(q=q, runtime=runtime, params=params, ranked=ranked)
 
-        with obs.span("stage.generate", {"stage": "generate"}):
+        with obs.with_stage("generate"):
             gen = self.generate.run(q=q, bundle=bundle, runtime=runtime, params=params)
 
-        with obs.span("stage.format_response", {"stage": "format_response"}):
+        with obs.with_stage("format_response"):
             return self.format_response.run(q=q, bundle=bundle, gen=gen, trace_id=trace_id)
 
 
