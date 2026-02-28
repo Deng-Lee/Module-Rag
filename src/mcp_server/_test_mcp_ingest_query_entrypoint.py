@@ -4,6 +4,7 @@ import os
 
 from src.core.runners import IngestRunner, QueryRunner
 from src.mcp_server.jsonrpc import Dispatcher, JsonRpcRequest, StdioTransport
+from src.mcp_server.errors import map_exception_to_jsonrpc
 from src.mcp_server.mcp import McpProtocol, McpSession
 from src.mcp_server.mcp.tools.ingest import make_tool as make_ingest_tool
 from src.mcp_server.mcp.tools.ping import tool as ping_tool
@@ -22,6 +23,7 @@ def main() -> None:
     proto = McpProtocol(tools=tools)
 
     disp = Dispatcher()
+    disp.error_mapper = map_exception_to_jsonrpc
 
     def initialize(req: JsonRpcRequest):
         return proto.handle_initialize(req.params if isinstance(req.params, dict) else None)
@@ -33,9 +35,13 @@ def main() -> None:
         params = req.params if isinstance(req.params, dict) else {}
         name = params.get("name")
         args = params.get("arguments")
+        timeout_ms = params.get("timeout_ms")
         if not isinstance(name, str) or not name:
             raise ValueError("missing tool name")
-        return proto.handle_tools_call(session, name=name, args=args)
+        sess = session
+        if isinstance(timeout_ms, int) and not isinstance(timeout_ms, bool):
+            sess = sess.with_deadline(timeout_ms)
+        return proto.handle_tools_call(sess, name=name, args=args)
 
     disp.register("initialize", initialize)
     disp.register("tools/list", tools_list)
@@ -46,4 +52,3 @@ def main() -> None:
 
 if __name__ == "__main__":  # pragma: no cover
     main()
-

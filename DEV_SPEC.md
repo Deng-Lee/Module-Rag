@@ -4847,23 +4847,23 @@ B) Dashboard（Web）
 
 目的：把 core/ingestion 侧错误映射为 MCP/JSON-RPC 可读错误；并预留取消/超时的会话字段（不做并发多会话，但保证行为一致）。
 
-修改/新增文件（可见变化）：`src/mcp_server/errors.py`、`src/mcp_server/mcp/session.py`（补充 timeout/cancel token 字段与传递约定）。
+修改/新增文件（可见变化）：`src/mcp_server/errors.py`、`src/mcp_server/mcp/session.py`、`src/mcp_server/mcp/protocol.py`（tools/call 统一注入 trace_id + deadline check）、`tests/unit/test_mcp_error_mapping_and_deadline.py`。
 
 实现函数（最小集合）：
 
-* `map_exception_to_jsonrpc(exc) -> JsonRpcError`
-* `map_exception_to_mcp(exc) -> McpToolError`
-* `McpSession.with_deadline(timeout_ms) -> session`
+* `map_exception_to_jsonrpc(exc) -> JsonRpcError`（bad args / not found / timeout / internal 分桶）
+* `McpSession.with_deadline(timeout_ms) -> session`（best-effort deadline，不强杀任务）
+* `McpSession.new_call(trace_id?) -> session`（每次 tools/call 生成 call-scoped `trace_id`）
 
 验收标准：
 
-* 任一 tool 抛出已知异常时，client 能收到结构化错误（含 code/message/trace_id）；
-* timeout 参数存在且可被传入（即使初期只做“超时后返回错误”而不强杀子任务）。
+* 任一 tool 抛出已知异常时，client 能收到结构化错误（含 `code/message/data.trace_id`）；
+* tools/call 支持可选 `timeout_ms`（transport adapter 透传到 `McpSession.with_deadline()`），超时返回 `deadline exceeded`（不要求强制取消）。
 
 测试方法：
 
 * 单测：错误映射覆盖 2-3 类典型异常（bad args / not found / internal）；
-* 单测：超时参数触发的错误返回（可用 fake sleep/provider 模拟）。
+* 单测：`with_deadline(0)` 触发 `deadline exceeded` 错误（无需 sleep）。
 
 9. **E-9 管理类 Tools：list/delete（管理操作流闭环）**
 
@@ -5741,7 +5741,7 @@ B) Dashboard（Web）
 | E-5 | Tool：library.ingest | 完成 | 2026-02-27 | `normalize_ingest_input/make_tool`、`IngestRunner.run`、JSON-RPC e2e（stdio） |
 | E-6 | Tool：library.query | 完成 | 2026-02-27 | `normalize_query_input/make_tool`、`QueryRunner.run`、ingest→query stdio e2e |
 | E-7 | Tools：query_assets/get_document（资源旁路） | 完成 | 2026-02-27 | `library.query_assets/library.get_document` + ingest→query→assets stdio e2e |
-| E-8 | 错误映射 + 超时/取消预留 | 未完成 |  | `map_exception_to_*`、`with_deadline` |
+| E-8 | 错误映射 + 超时/取消预留 | 完成 | 2026-02-27 | `map_exception_to_jsonrpc`、`McpSession.with_deadline/new_call`、timeout_ms 透传与 deadline exceeded |
 | E-9 | 管理类 Tools：list/delete | 未完成 |  | `tool_list_documents/tool_delete_document` + 过滤召回 |
 | E-10 | MCP Server 启动入口装配（entry wiring） | 未完成 |  | `build_runtime/build_observability/serve_stdio` |
 | E-11 | 删除一致性与回收策略（跨存储统一口径） | 未完成 |  | `AdminRunner.delete_document` + Chroma/FTS5/FS 一致处理 |

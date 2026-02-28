@@ -39,4 +39,26 @@ def test_mcp_tools_list_and_call_over_stdio() -> None:
     assert out2["result"]["content"][0]["type"] == "text"
     assert "hi" in out2["result"]["content"][0]["text"]
 
+    # E-8: deadline parameter should be accepted and return a structured error.
+    # We use timeout_ms=0 to ensure it trips before tool execution.
+    p = subprocess.Popen(
+        cmd,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        cwd=str(repo_root),
+    )
+    assert p.stdin is not None and p.stdout is not None
+    p.stdin.write(
+        '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"library.ping","arguments":{"message":"hi"},"timeout_ms":0}}\n'
+    )
+    p.stdin.flush()
+    p.stdin.close()
+    out3 = json.loads(p.stdout.readline().strip())
+    assert out3["id"] == 3
+    assert out3["error"]["code"] == -32001
+    assert "trace_id" in (out3["error"].get("data") or {})
+    p.terminate()
+
     p.terminate()
