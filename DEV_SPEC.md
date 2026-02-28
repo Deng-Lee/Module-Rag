@@ -4822,13 +4822,16 @@ B) Dashboard（Web）
 
 目的：实现“资源旁路”：query 只返回 `asset_ids` 锚点，client 按需调用拉取缩略图/原文，避免在主响应里塞 base64。
 
-修改/新增文件（可见变化）：`src/mcp_server/mcp/tools/query_assets.py`、`src/mcp_server/mcp/tools/get_document.py`、`src/mcp_server/mcp/resources/assets.py`（若走 resources 语义）。
+修改/新增文件（可见变化）：`src/mcp_server/mcp/tools/query_assets.py`、`src/mcp_server/mcp/tools/get_document.py`、`src/ingestion/stages/storage/sqlite.py`（补齐 assets 映射读取）、`tests/integration/test_mcp_assets_tools_stdio.py`（stdio e2e）。
 
 实现函数（最小集合）：
 
-* `tool_query_assets(session, args) -> ToolResult`（支持批量 + thumb）
-* `tool_get_document(session, args) -> ToolResult`（返回 md facts + 可选 summarize 头部）
-* `AssetsResource.read(asset_id, variant="thumb") -> bytes`（可选：资源语义）
+* `library.query_assets`：
+  * `make_tool(cfg?) -> Tool`
+  * `asset_ids[] -> assets[{asset_id,mime,variant,size_bytes,bytes_b64}] + missing[] + too_large[]`
+* `library.get_document`：
+  * `make_tool(cfg?) -> Tool`
+  * `doc_id + version_id -> facts md（受 max_chars 限制，不返回绝对路径）`
 
 验收标准：
 
@@ -5737,7 +5740,7 @@ B) Dashboard（Web）
 | E-4 | Schema + L0/L1/L2 Envelope | 完成 | 2026-02-27 | `validate_tool_args`（最小 JSON Schema 子集）、`build_response_envelope`（text-first）、`degrade`（L0/L1/L2） |
 | E-5 | Tool：library.ingest | 完成 | 2026-02-27 | `normalize_ingest_input/make_tool`、`IngestRunner.run`、JSON-RPC e2e（stdio） |
 | E-6 | Tool：library.query | 完成 | 2026-02-27 | `normalize_query_input/make_tool`、`QueryRunner.run`、ingest→query stdio e2e |
-| E-7 | Tools：query_assets/get_document（资源旁路） | 未完成 |  | 批量 thumb、facts md 回读 |
+| E-7 | Tools：query_assets/get_document（资源旁路） | 完成 | 2026-02-27 | `library.query_assets/library.get_document` + ingest→query→assets stdio e2e |
 | E-8 | 错误映射 + 超时/取消预留 | 未完成 |  | `map_exception_to_*`、`with_deadline` |
 | E-9 | 管理类 Tools：list/delete | 未完成 |  | `tool_list_documents/tool_delete_document` + 过滤召回 |
 | E-10 | MCP Server 启动入口装配（entry wiring） | 未完成 |  | `build_runtime/build_observability/serve_stdio` |

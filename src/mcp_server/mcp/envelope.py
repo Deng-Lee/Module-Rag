@@ -51,9 +51,11 @@ def _from_text(
     text: str,
     structured: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    result: dict[str, Any] = {"content": [{"type": "text", "text": text}], "structuredContent": dict(structured or {})}
-
-    _inject_common(result["structuredContent"], session=session, tool_name=tool_name)
+    # Keep structured payload shape consistent with ResponseIR:
+    # all tool-specific fields go under `structuredContent.structured`.
+    sc: dict[str, Any] = {"structured": dict(structured or {})}
+    _inject_common(sc, session=session, tool_name=tool_name)
+    result: dict[str, Any] = {"content": [{"type": "text", "text": text}], "structuredContent": sc}
     return degrade(session.client_level, result)
 
 

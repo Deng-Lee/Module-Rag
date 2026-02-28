@@ -45,6 +45,7 @@ def test_mcp_library_ingest_over_stdio_persists_stores(tmp_path: Path, tmp_workd
     env = dict(os.environ)
     env["MODULE_RAG_SETTINGS_PATH"] = str(settings_path)
 
+    repo_root = Path(__file__).resolve().parents[2]
     cmd = [sys.executable, "-m", "src.mcp_server._test_mcp_ingest_entrypoint"]
     p = subprocess.Popen(
         cmd,
@@ -53,6 +54,7 @@ def test_mcp_library_ingest_over_stdio_persists_stores(tmp_path: Path, tmp_workd
         stderr=subprocess.PIPE,
         text=True,
         env=env,
+        cwd=str(repo_root),
     )
     assert p.stdin is not None and p.stdout is not None
 
@@ -110,4 +112,3 @@ def test_mcp_library_ingest_over_stdio_persists_stores(tmp_path: Path, tmp_workd
     assert row is not None and int(row["c"]) > 0
 
     p.terminate()
-

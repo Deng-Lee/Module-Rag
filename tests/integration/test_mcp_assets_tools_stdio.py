@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -32,21 +31,27 @@ def _write_settings_yaml(p: Path, *, data_dir: Path) -> None:
 
 
 @pytest.mark.integration
-def test_mcp_library_query_after_ingest_over_stdio(tmp_path: Path, tmp_workdir: Path) -> None:
+def test_mcp_query_assets_and_get_document_over_stdio(tmp_path: Path, tmp_workdir: Path) -> None:
     _ = tmp_workdir
 
     data_dir = tmp_path / "data"
     settings_path = tmp_path / "settings.yaml"
     _write_settings_yaml(settings_path, data_dir=data_dir)
 
+    # Build a markdown that references a local image.
+    fixtures_dir = Path(__file__).resolve().parents[1] / "fixtures"
+    img_src = fixtures_dir / "assets" / "sample.svg"
+    img_path = tmp_path / "sample.svg"
+    img_path.write_bytes(img_src.read_bytes())
+
     md_path = tmp_path / "doc.md"
-    md_path.write_text("# Title\n\nhello world from chunk\n", encoding="utf-8")
+    md_path.write_text(f"# Title\n\nHere is an image: ![alt]({img_path.as_posix()})\n", encoding="utf-8")
 
     env = dict(os.environ)
     env["MODULE_RAG_SETTINGS_PATH"] = str(settings_path)
 
     repo_root = Path(__file__).resolve().parents[2]
-    cmd = [sys.executable, "-m", "src.mcp_server._test_mcp_ingest_query_entrypoint"]
+    cmd = [sys.executable, "-m", "src.mcp_server._test_mcp_assets_entrypoint"]
     p = subprocess.Popen(
         cmd,
         stdin=subprocess.PIPE,
@@ -58,6 +63,7 @@ def test_mcp_library_query_after_ingest_over_stdio(tmp_path: Path, tmp_workdir: 
     )
     assert p.stdin is not None and p.stdout is not None
 
+    # 1) ingest
     p.stdin.write(
         json.dumps(
             {
@@ -70,20 +76,20 @@ def test_mcp_library_query_after_ingest_over_stdio(tmp_path: Path, tmp_workdir: 
         )
         + "\n"
     )
+    # 2) query (get asset_ids from sources)
     p.stdin.write(
         json.dumps(
             {
                 "jsonrpc": "2.0",
                 "id": 2,
                 "method": "tools/call",
-                "params": {"name": "library.query", "arguments": {"query": "hello world", "top_k": 3}},
+                "params": {"name": "library.query", "arguments": {"query": "image", "top_k": 3}},
             },
             ensure_ascii=False,
         )
         + "\n"
     )
     p.stdin.flush()
-    p.stdin.close()
 
     out1 = json.loads(p.stdout.readline().strip())
     assert out1["id"] == 1
@@ -94,29 +100,59 @@ def test_mcp_library_query_after_ingest_over_stdio(tmp_path: Path, tmp_workdir: 
 
     out2 = json.loads(p.stdout.readline().strip())
     assert out2["id"] == 2
-    res2 = out2["result"]
-    assert res2["content"][0]["type"] == "text"
-    assert "Retrieved Chunks" in res2["content"][0]["text"] or "未召回到相关内容" in res2["content"][0]["text"]
-
-    sc2 = res2.get("structuredContent")
-    assert isinstance(sc2, dict)
-    sources = sc2.get("sources")
+    sc2 = out2["result"]["structuredContent"]
+    sources = sc2.get("sources") or []
     assert isinstance(sources, list)
+    # Find any asset_ids from sources.
+    asset_ids: list[str] = []
+    for s in sources:
+        aids = s.get("asset_ids")
+        if isinstance(aids, list):
+            asset_ids.extend([x for x in aids if isinstance(x, str) and x])
+    assert asset_ids, "expected at least one asset_id in retrieved sources"
 
-    # If there are sources, they should resolve back to the same doc/version we ingested.
-    if sources:
-        s0 = sources[0]
-        assert s0.get("doc_id") == doc_id
-        assert s0.get("version_id") == version_id
+    # 3) query_assets
+    p.stdin.write(
+        json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {"name": "library.query_assets", "arguments": {"asset_ids": asset_ids, "max_bytes": 200000}},
+            },
+            ensure_ascii=False,
+        )
+        + "\n"
+    )
+    # 4) get_document
+    p.stdin.write(
+        json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 4,
+                "method": "tools/call",
+                "params": {
+                    "name": "library.get_document",
+                    "arguments": {"doc_id": doc_id, "version_id": version_id, "max_chars": 20000},
+                },
+            },
+            ensure_ascii=False,
+        )
+        + "\n"
+    )
+    p.stdin.flush()
+    p.stdin.close()
 
-    # Verify sqlite has chunks for the ingested doc/version (sanity).
-    app_db = data_dir / "sqlite" / "app.sqlite"
-    with sqlite3.connect(app_db) as conn:
-        conn.row_factory = sqlite3.Row
-        row = conn.execute(
-            "SELECT COUNT(*) AS c FROM chunks WHERE doc_id=? AND version_id=?",
-            (doc_id, version_id),
-        ).fetchone()
-    assert row is not None and int(row["c"]) > 0
+    out3 = json.loads(p.stdout.readline().strip())
+    assert out3["id"] == 3
+    res3 = out3["result"]["structuredContent"]["structured"]
+    assets = res3.get("assets")
+    assert isinstance(assets, list) and assets
+    assert "bytes_b64" in assets[0]
+
+    out4 = json.loads(p.stdout.readline().strip())
+    assert out4["id"] == 4
+    text = out4["result"]["content"][0]["text"]
+    assert "asset://" in text  # image link is normalized
 
     p.terminate()

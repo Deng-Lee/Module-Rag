@@ -232,6 +232,19 @@ class SqliteStore:
             out.setdefault(cid, []).append(aid)
         return out
 
+    def fetch_assets(self, asset_ids: list[str]) -> dict[str, str | None]:
+        """Fetch `asset_id -> rel_path` mapping from assets table (best-effort)."""
+        if not asset_ids:
+            return {}
+        placeholders = ",".join(["?"] * len(asset_ids))
+        sql = f"SELECT asset_id, rel_path FROM assets WHERE asset_id IN ({placeholders})"
+        with self._connect() as conn:
+            rows = conn.execute(sql, tuple(asset_ids)).fetchall()
+        out: dict[str, str | None] = {}
+        for r in rows:
+            out[str(r["asset_id"])] = (str(r["rel_path"]) if r["rel_path"] is not None else None)
+        return out
+
 
 def new_doc_id() -> str:
     return f"doc_{uuid.uuid4().hex}"

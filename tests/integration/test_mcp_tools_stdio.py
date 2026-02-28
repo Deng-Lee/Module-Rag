@@ -3,12 +3,14 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
 
 @pytest.mark.integration
 def test_mcp_tools_list_and_call_over_stdio() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
     cmd = [sys.executable, "-m", "src.mcp_server._test_mcp_entrypoint"]
     p = subprocess.Popen(
         cmd,
@@ -16,6 +18,7 @@ def test_mcp_tools_list_and_call_over_stdio() -> None:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        cwd=str(repo_root),
     )
     assert p.stdin is not None and p.stdout is not None
 
@@ -37,4 +40,3 @@ def test_mcp_tools_list_and_call_over_stdio() -> None:
     assert "hi" in out2["result"]["content"][0]["text"]
 
     p.terminate()
-
