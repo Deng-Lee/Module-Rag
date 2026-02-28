@@ -33,6 +33,11 @@ class InMemoryVectorIndex:
         scored.sort(key=lambda x: x[1], reverse=True)
         return scored[:top_k]
 
+    def delete(self, chunk_ids: list[str]) -> None:
+        for cid in chunk_ids:
+            self._items.pop(cid, None)
+            self._norms.pop(cid, None)
+
 
 def _norm(vec: list[float]) -> float:
     return math.sqrt(sum(v * v for v in vec))

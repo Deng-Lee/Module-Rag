@@ -67,6 +67,14 @@ class ChromaLiteVectorIndex:
             row = conn.execute("SELECT COUNT(*) AS c FROM vectors").fetchone()
         return int(row["c"] if row else 0)
 
+    def delete(self, chunk_ids: list[str]) -> None:
+        if not chunk_ids:
+            return
+        placeholders = ",".join(["?"] * len(chunk_ids))
+        sql = f"DELETE FROM vectors WHERE chunk_id IN ({placeholders})"
+        with self._connect() as conn:
+            conn.execute(sql, tuple(chunk_ids))
+
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row

@@ -4,9 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ....core.strategy import load_settings
-from ....ingestion.stages.storage.sqlite import SqliteStore
-from ...jsonrpc.codec import INVALID_PARAMS
+from ....core.runners.admin import AdminRunner
+from ...jsonrpc.codec import INTERNAL_ERROR, INVALID_PARAMS
 from ...jsonrpc.dispatcher import JsonRpcAppError
 from ..session import McpSession
 from .base import FunctionTool, ToolSpec
@@ -42,50 +41,45 @@ def make_tool(*, cfg: DeleteDocumentToolConfig | None = None) -> FunctionTool:
 
         dry_run = bool(args.get("dry_run", False))
 
-        settings = load_settings(cfg.settings_path)
-        sqlite = SqliteStore(db_path=settings.paths.sqlite_dir / "app.sqlite")
-
-        affected = {"sqlite": {"versions_marked": 0, "chunks_affected": 0}, "chroma": {}, "fts5": {}, "fs": {}}
-        warnings: list[str] = []
-
-        if dry_run:
-            # Best-effort preview.
-            affected["sqlite"] = sqlite.preview_delete(doc_id=doc_id, version_id=version_id)  # type: ignore[assignment]
-            warnings.append("dry_run_preview_only")
-        else:
-            affected["sqlite"] = sqlite.mark_deleted(doc_id=doc_id, version_id=version_id)  # type: ignore[assignment]
-
-        st = "ok" if affected["sqlite"]["versions_marked"] > 0 else "noop"
+        try:
+            res = AdminRunner(settings_path=cfg.settings_path).delete_document(
+                doc_id=doc_id,
+                version_id=version_id,
+                mode=mode,
+                dry_run=dry_run,
+            )
+        except Exception as e:
+            raise JsonRpcAppError(INTERNAL_ERROR, "delete failed", {"exc_type": type(e).__name__}) from e
 
         target = {"doc_id": doc_id}
         if version_id:
             target["version_id"] = version_id
 
+        deleted = {"doc_id": doc_id, "version_ids": []}
         if version_id:
-            deleted = {"doc_id": doc_id, "version_ids": [version_id]}
-        else:
-            # Enumerate impacted versions for admin UI (soft delete semantics).
-            deleted = {"doc_id": doc_id, "version_ids": sqlite.fetch_doc_version_ids(doc_id=doc_id, include_deleted=True)}
+            deleted["version_ids"] = [version_id]
 
         text_lines = [
-            "Delete (soft) finished.",
-            f"- status: {st}",
+            f"Delete ({res.mode}) finished.",
+            f"- status: {res.status}",
             f"- doc_id: {doc_id}",
             f"- version_id: {version_id or '(all)'}",
             f"- dry_run: {dry_run}",
         ]
         if reason:
             text_lines.append(f"- reason: {reason}")
+        if res.warnings:
+            text_lines.append(f"- warnings: {', '.join(res.warnings)}")
 
         return {
             "text": "\n".join(text_lines),
             "structured": {
-                "status": st,
-                "mode": mode,
+                "status": res.status,
+                "mode": res.mode,
                 "target": target,
                 "deleted": deleted,
-                "affected": affected,
-                "warnings": warnings,
+                "affected": res.affected,
+                "warnings": res.warnings,
             },
         }
 

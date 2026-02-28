@@ -4950,14 +4950,14 @@ Tool 契约（List）：`library.list_documents`
 
 目的：把“删除”从单点操作升级为系统级一致性：删除文档/版本后，SQLite 元数据、Chroma 向量、FTS5 稀疏索引、FS 事实层/资产的处理口径一致；并明确软删/硬删/保留资产的策略（先实现软删 + 过滤召回，硬删作为可选扩展）。
 
-修改/新增文件（可见变化）：`src/core/runners/admin.py`（或同类：统一管理操作入口）、`src/ingestion/stages/storage/sqlite.py`、`src/ingestion/stages/storage/chroma.py`、`src/ingestion/stages/storage/fts5.py`、`src/ingestion/stages/storage/fs.py`、（可选）`src/mcp_server/mcp/tools/delete_document.py`（改为调用 admin runner）。
+修改/新增文件（可见变化）：`src/core/runners/admin.py`（统一管理操作入口）、`src/ingestion/stages/storage/sqlite.py`、`src/ingestion/stages/storage/chroma.py`、`src/ingestion/stages/storage/fts5.py`、`src/ingestion/stages/storage/fs.py`、`src/mcp_server/mcp/tools/delete_document.py`（改为调用 admin runner）、`tests/integration/test_admin_hard_delete.py`。
 
 实现函数（最小集合）：
 
-* `AdminRunner.delete_document(doc_id, version_id=None, mode="soft") -> DeleteResult`
-* `SqliteStore.mark_deleted(...)` / `purge_deleted(...)`
-* `ChromaStore.delete(where)`、`Fts5Store.delete(doc_id, version_id)`（或按 chunk_id 批量删）
-* `FsStore.garbage_collect(doc_id, version_id)`（可先 noop，但口径必须写清）
+* `AdminRunner.delete_document(doc_id, version_id=None, mode="soft|hard", dry_run=False) -> DeleteResult`
+* `SqliteStore.mark_deleted(...)` / `preview_delete(...)` / `delete_doc_versions(...)` / `delete_chunks(...)`
+* `ChromaStore.delete(chunk_ids)`、`Fts5Store.delete(chunk_ids)`（按 chunk_id 批量删）
+* `FsStore.delete_md(...)` / `delete_raw_by_hash(...)` / `delete_asset(...)`
 
 验收标准：
 
@@ -5780,7 +5780,7 @@ Tool 契约（List）：`library.list_documents`
 | E-8 | 错误映射 + 超时/取消预留 | 完成 | 2026-02-27 | `map_exception_to_jsonrpc`、`McpSession.with_deadline/new_call`、timeout_ms 透传与 deadline exceeded |
 | E-9 | 管理类 Tools：list/delete | 完成 | 2026-02-27 | `library.list_documents/library.delete_document`（软删）+ Query 默认过滤 deleted |
 | E-10 | MCP Server 启动入口装配（entry wiring） | 完成 | 2026-02-27 | `entry.py` 装配 + jsonl sink + stdio 入口 |
-| E-11 | 删除一致性与回收策略（跨存储统一口径） | 未完成 |  | `AdminRunner.delete_document` + Chroma/FTS5/FS 一致处理 |
+| E-11 | 删除一致性与回收策略（跨存储统一口径） | 完成 | 2026-02-27 | `AdminRunner.delete_document` + Chroma/FTS5/FS/SQLite 硬删一致 |
 
 #### 6.4.6 阶段 F
 

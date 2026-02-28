@@ -45,3 +45,11 @@ class Fts5Store:
                 (query_expr, top_k),
             ).fetchall()
         return [(r["chunk_id"], float(r["score"])) for r in rows]
+
+    def delete(self, chunk_ids: list[str]) -> None:
+        if not chunk_ids:
+            return
+        placeholders = ",".join(["?"] * len(chunk_ids))
+        sql = f"DELETE FROM chunks_fts WHERE chunk_id IN ({placeholders})"
+        with self._connect() as conn:
+            conn.execute(sql, tuple(chunk_ids))

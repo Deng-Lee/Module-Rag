@@ -383,6 +383,107 @@ class SqliteStore:
             out[str(r["asset_id"])] = (str(r["rel_path"]) if r["rel_path"] is not None else None)
         return out
 
+    def fetch_doc_version_hashes(self, *, doc_id: str, version_id: str | None = None) -> list[str]:
+        if version_id:
+            sql = "SELECT file_sha256 FROM doc_versions WHERE doc_id=? AND version_id=?"
+            params = (doc_id, version_id)
+        else:
+            sql = "SELECT file_sha256 FROM doc_versions WHERE doc_id=?"
+            params = (doc_id,)
+        with self._connect() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return [str(r["file_sha256"]) for r in rows if r["file_sha256"]]
+
+    def fetch_chunk_ids(self, *, doc_id: str, version_id: str | None = None) -> list[str]:
+        if version_id:
+            sql = "SELECT chunk_id FROM chunks WHERE doc_id=? AND version_id=?"
+            params = (doc_id, version_id)
+        else:
+            sql = "SELECT chunk_id FROM chunks WHERE doc_id=?"
+            params = (doc_id,)
+        with self._connect() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return [str(r["chunk_id"]) for r in rows]
+
+    def fetch_asset_ids_by_doc_version(self, *, doc_id: str, version_id: str | None = None) -> list[str]:
+        if version_id:
+            sql = "SELECT DISTINCT asset_id FROM asset_refs WHERE doc_id=? AND version_id=?"
+            params = (doc_id, version_id)
+        else:
+            sql = "SELECT DISTINCT asset_id FROM asset_refs WHERE doc_id=?"
+            params = (doc_id,)
+        with self._connect() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return [str(r["asset_id"]) for r in rows if r["asset_id"]]
+
+    def delete_chunk_assets(self, chunk_ids: list[str]) -> int:
+        if not chunk_ids:
+            return 0
+        placeholders = ",".join(["?"] * len(chunk_ids))
+        sql = f"DELETE FROM chunk_assets WHERE chunk_id IN ({placeholders})"
+        with self._connect() as conn:
+            cur = conn.execute(sql, tuple(chunk_ids))
+        return int(cur.rowcount or 0)
+
+    def delete_chunks(self, *, doc_id: str, version_id: str | None = None) -> int:
+        if version_id:
+            sql = "DELETE FROM chunks WHERE doc_id=? AND version_id=?"
+            params = (doc_id, version_id)
+        else:
+            sql = "DELETE FROM chunks WHERE doc_id=?"
+            params = (doc_id,)
+        with self._connect() as conn:
+            cur = conn.execute(sql, params)
+        return int(cur.rowcount or 0)
+
+    def delete_asset_refs(self, *, doc_id: str, version_id: str | None = None) -> int:
+        if version_id:
+            sql = "DELETE FROM asset_refs WHERE doc_id=? AND version_id=?"
+            params = (doc_id, version_id)
+        else:
+            sql = "DELETE FROM asset_refs WHERE doc_id=?"
+            params = (doc_id,)
+        with self._connect() as conn:
+            cur = conn.execute(sql, params)
+        return int(cur.rowcount or 0)
+
+    def count_asset_refs(self, asset_id: str) -> int:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) AS c FROM asset_refs WHERE asset_id=?",
+                (asset_id,),
+            ).fetchone()
+        return int(row["c"] if row else 0)
+
+    def delete_assets(self, asset_ids: list[str]) -> int:
+        if not asset_ids:
+            return 0
+        placeholders = ",".join(["?"] * len(asset_ids))
+        sql = f"DELETE FROM assets WHERE asset_id IN ({placeholders})"
+        with self._connect() as conn:
+            cur = conn.execute(sql, tuple(asset_ids))
+        return int(cur.rowcount or 0)
+
+    def delete_doc_versions(self, *, doc_id: str, version_id: str | None = None) -> int:
+        if version_id:
+            sql = "DELETE FROM doc_versions WHERE doc_id=? AND version_id=?"
+            params = (doc_id, version_id)
+        else:
+            sql = "DELETE FROM doc_versions WHERE doc_id=?"
+            params = (doc_id,)
+        with self._connect() as conn:
+            cur = conn.execute(sql, params)
+        return int(cur.rowcount or 0)
+
+    def delete_document_if_orphan(self, doc_id: str) -> int:
+        with self._connect() as conn:
+            row = conn.execute("SELECT COUNT(*) AS c FROM doc_versions WHERE doc_id=?", (doc_id,)).fetchone()
+            cnt = int(row["c"] if row else 0)
+            if cnt == 0:
+                cur = conn.execute("DELETE FROM documents WHERE doc_id=?", (doc_id,))
+                return int(cur.rowcount or 0)
+        return 0
+
 
 def new_doc_id() -> str:
     return f"doc_{uuid.uuid4().hex}"

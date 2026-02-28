@@ -18,6 +18,9 @@ class VectorIndex(Protocol):
     def query(self, vector: list[float], top_k: int) -> list[tuple[str, float]]:
         ...
 
+    def delete(self, chunk_ids: list[str]) -> None:
+        ...
+
 
 class SparseIndex(Protocol):
     def upsert(self, items: list[dict[str, Any]]) -> None:

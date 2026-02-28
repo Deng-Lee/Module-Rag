@@ -17,3 +17,6 @@ class ChromaStore:
 
     def upsert(self, items: list[VectorItem]) -> None:
         self.index.upsert(items)
+
+    def delete(self, chunk_ids: list[str]) -> None:
+        self.index.delete(chunk_ids)

@@ -46,3 +46,56 @@ class FsStore:
         out_path = out_dir / "md_norm.md"
         out_path.write_text(md_norm, encoding="utf-8")
         return out_path
+
+    def delete_md(self, doc_id: str, version_id: str | None = None) -> int:
+        if self.md_dir is None:
+            return 0
+        base = (self.md_dir / doc_id).resolve()
+        if version_id:
+            targets = [base / version_id]
+        else:
+            targets = list(base.glob("*"))
+        removed = 0
+        for t in targets:
+            if t.exists() and t.is_dir():
+                for p in t.rglob("*"):
+                    if p.is_file():
+                        try:
+                            p.unlink()
+                            removed += 1
+                        except Exception:
+                            pass
+                try:
+                    t.rmdir()
+                except Exception:
+                    pass
+        # Attempt to clean doc dir if empty.
+        try:
+            if base.exists() and base.is_dir() and not any(base.iterdir()):
+                base.rmdir()
+        except Exception:
+            pass
+        return removed
+
+    def delete_raw_by_hash(self, file_sha256: str) -> int:
+        # Raw files are stored as "<sha256>.<ext>".
+        removed = 0
+        for p in self.raw_dir.glob(f"{file_sha256}.*"):
+            if p.is_file():
+                try:
+                    p.unlink()
+                    removed += 1
+                except Exception:
+                    pass
+        return removed
+
+    def delete_asset(self, asset_id: str, assets_dir: Path) -> int:
+        removed = 0
+        for p in assets_dir.glob(f"{asset_id}.*"):
+            if p.is_file():
+                try:
+                    p.unlink()
+                    removed += 1
+                except Exception:
+                    pass
+        return removed
