@@ -4777,14 +4777,15 @@ B) Dashboard（Web）
 
 5. **E-5 Tools：library.ingest（对接 IngestionPipeline）**
 
-目的：实现 `library.ingest` 工具：接收文件路径/bytes（按你的实际接口约定），调用 `IngestionPipeline.run()`，返回 `{doc_id, version_id, counts, warnings, trace_id}`。
+目的：实现 `library.ingest` 工具：接收本地 `file_path`，调用离线 IngestionPipeline（dedup→loader→chunk→embed→upsert），返回 `{doc_id, version_id, counts, trace_id}`。
 
-修改/新增文件（可见变化）：`src/mcp_server/mcp/tools/ingest.py`。
+修改/新增文件（可见变化）：`src/mcp_server/mcp/tools/ingest.py`、`src/core/runners/ingest.py`、`tests/integration/test_mcp_ingest_stdio.py`（以及测试入口 `src/mcp_server/_test_mcp_ingest_entrypoint.py`）。
 
 实现函数（最小集合）：
 
-* `tool_ingest(session, args) -> ToolResult`
-* `normalize_ingest_input(args) -> IngestInput`
+* `normalize_ingest_input(args, cfg) -> (file_path, policy, strategy_config_id)`
+* `make_tool(runner, cfg?) -> Tool`
+* `IngestRunner.run(file_path, strategy_config_id, policy) -> ResponseIR`
 
 验收标准：
 
@@ -5734,7 +5735,7 @@ B) Dashboard（Web）
 | E-2 | Dispatcher：method 路由 | 完成 | 2026-02-27 | `Dispatcher.register/handle`、`default_error_mapper` |
 | E-3 | MCP 协议语义层：tools/list + tools/call | 完成 | 2026-02-27 | `McpProtocol.handle_initialize/tools_list/tools_call`、ToolRegistry |
 | E-4 | Schema + L0/L1/L2 Envelope | 完成 | 2026-02-27 | `validate_tool_args`（最小 JSON Schema 子集）、`build_response_envelope`（text-first）、`degrade`（L0/L1/L2） |
-| E-5 | Tool：library.ingest | 未完成 |  | `tool_ingest`→`IngestionPipeline.run` |
+| E-5 | Tool：library.ingest | 完成 | 2026-02-27 | `normalize_ingest_input/make_tool`、`IngestRunner.run`、JSON-RPC e2e（stdio） |
 | E-6 | Tool：library.query | 未完成 |  | `tool_query`→`QueryRunner.run` |
 | E-7 | Tools：query_assets/get_document（资源旁路） | 未完成 |  | 批量 thumb、facts md 回读 |
 | E-8 | 错误映射 + 超时/取消预留 | 未完成 |  | `map_exception_to_*`、`with_deadline` |

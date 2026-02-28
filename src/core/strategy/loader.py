@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,14 @@ def _parse_scalar(v: str) -> Any:
     s = v.strip()
     if s == "":
         return ""
+    # Allow JSON-like inline structures in YAML subset (enables lists/dicts in strategy files
+    # without requiring PyYAML). Example: separators: ["\\n\\n", "\\n", " ", ""]
+    if (s.startswith("[") and s.endswith("]")) or (s.startswith("{") and s.endswith("}")):
+        try:
+            return json.loads(s)
+        except Exception:
+            # Fall back to raw string if parsing fails.
+            pass
     lo = s.lower()
     if lo in {"null", "~"}:
         return None

@@ -21,7 +21,7 @@ providers:
     params:
       name: fake-llm-alt
   vector_index:
-    provider_id: vector.in_memory
+    provider_id: vector.chroma_lite
   retriever:
     provider_id: retriever.chroma_dense
     params:
