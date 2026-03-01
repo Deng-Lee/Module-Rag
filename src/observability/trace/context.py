@@ -12,6 +12,7 @@ from .envelope import (
     EventRecord,
     SpanRecord,
     TraceEnvelope,
+    compute_aggregates,
     new_event,
     new_span,
 )
@@ -154,6 +155,7 @@ class TraceContext:
             aggregates={},
             providers=dict(self.providers_snapshot),
         )
+        envelope.aggregates = compute_aggregates(envelope)
         # Best-effort: notify observability sink, if configured.
         try:
             from ..obs import api as obs

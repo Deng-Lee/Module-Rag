@@ -160,3 +160,42 @@ class TraceEnvelope:
                 yield ev.kind
         for ev in self.events:
             yield ev.kind
+
+
+def compute_aggregates(envelope: TraceEnvelope) -> JsonDict:
+    latency_ms = round((envelope.end_ts - envelope.start_ts) * 1000.0, 3)
+    stage_latency_ms: JsonDict = {}
+    counters: JsonDict = {}
+    errors: list[JsonDict] = []
+
+    for s in envelope.spans:
+        if s.end_ts is not None:
+            stage_latency_ms[s.name] = round((s.end_ts - s.start_ts) * 1000.0, 3)
+        if s.status == "error":
+            errors.append({"stage": s.name, "status": s.status})
+
+        for ev in s.events:
+            if ev.kind == "retrieval.candidates":
+                source = str(ev.attrs.get("source", "unknown"))
+                count = int(ev.attrs.get("count", 0))
+                counters[f"retrieval.candidates.{source}"] = count
+            elif ev.kind == "retrieval.fused":
+                counters["retrieval.fused"] = int(ev.attrs.get("count", 0))
+            elif ev.kind == "context.built":
+                counters["context.chunks"] = int(ev.attrs.get("count", 0))
+                if "asset_refs" in ev.attrs:
+                    counters["context.asset_refs"] = int(ev.attrs.get("asset_refs", 0))
+                if "dropped_deleted" in ev.attrs:
+                    counters["context.dropped_deleted"] = int(ev.attrs.get("dropped_deleted", 0))
+            elif ev.kind == "generate.used":
+                if "tokens_in" in ev.attrs:
+                    counters["generate.tokens_in"] = int(ev.attrs.get("tokens_in", 0))
+                if "tokens_out" in ev.attrs:
+                    counters["generate.tokens_out"] = int(ev.attrs.get("tokens_out", 0))
+
+    return {
+        "latency_ms": latency_ms,
+        "stage_latency_ms": stage_latency_ms,
+        "counters": counters,
+        "errors": errors,
+    }

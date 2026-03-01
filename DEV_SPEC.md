@@ -5802,7 +5802,7 @@ Tool 契约（List）：`library.list_documents`
 | F-1 | 稳定契约：stage.* + event.kind + schema | 完成 | 2026-02-28 | `TraceEnvelope.validate` + `trace_envelope.json` 升级 + stage/event 稳定约束 |
 | F-2 | Runner 自动包裹：stage span + 关键事件 | 完成 | 2026-02-28 | `with_stage`、`emit_stage_summary` + pipeline 统一接入 |
 | F-3 | Provider 归因快照 | 完成 | 2026-02-28 | `providers_snapshot` 注入 TraceEnvelope + 运行时快照 |
-| F-4 | aggregates 生成 | 未完成 |  | `compute_aggregates`、timing/counter |
+| F-4 | aggregates 生成 | 完成 | 2026-02-28 | `compute_aggregates` 由 spans/events 生成 stage_latency/counters/errors |
 | F-5 | SQLite sink + readers（不重复存储） | 未完成 |  | `SqliteTraceSink/Reader` 分页/过滤 |
 | F-6 | 回放键 replay keys | 未完成 |  | `query_hash/file_sha256/ranked_chunk_ids` |
 | F-7 | golden trace 回归 | 未完成 |  | schema + golden/快照断言 |
