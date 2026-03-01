@@ -5806,7 +5806,7 @@ Tool 契约（List）：`library.list_documents`
 | F-5 | SQLite sink + readers（不重复存储） | 完成 | 2026-02-28 | `SqliteTraceSink/SqliteTraceReader` + list/get/paging |
 | F-6 | 回放键 replay keys | 完成 | 2026-02-28 | `query_hash/file_sha256/ranked_chunk_ids` 写入 TraceEnvelope.replay |
 | F-7 | golden trace 回归 | 完成 | 2026-02-28 | `tests/golden/trace_query.json` + `test_trace_golden.py` 快照断言 |
-| F-8 | 稳定性契约回归（ID/规范化/切分） | 未完成 |  | canonical/chunk_id/asset_id/ref_id 测试 |
+| F-8 | 稳定性契约回归（ID/规范化/切分） | 完成 | 2026-02-28 | canonical/chunk_id/asset_id/ref_id/md_norm 稳定性测试 |
 
 #### 6.4.7 阶段 G
 
