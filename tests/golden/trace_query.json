@@ -1,0 +1,63 @@
+{
+  "schema_version": "trace.v1",
+  "trace_id": "trace_golden_query",
+  "trace_type": "query",
+  "status": "ok",
+  "start_ts": 0.0,
+  "end_ts": 0.0,
+  "strategy_config_id": "local.default",
+  "spans": [
+    {
+      "span_id": "span_fixed",
+      "name": "stage.query_norm",
+      "parent_span_id": null,
+      "start_ts": 0.0,
+      "end_ts": 0.0,
+      "status": "ok",
+      "attrs": {
+        "stage": "query_norm"
+      },
+      "events": [
+        {
+          "ts": 0.0,
+          "kind": "stage.start",
+          "attrs": {
+            "stage": "query_norm"
+          }
+        },
+        {
+          "ts": 0.0,
+          "kind": "query.normalized",
+          "attrs": {
+            "query_hash": "h",
+            "rewrite_used": false
+          }
+        },
+        {
+          "ts": 0.0,
+          "kind": "stage.end",
+          "attrs": {
+            "stage": "query_norm"
+          }
+        }
+      ]
+    }
+  ],
+  "events": [],
+  "aggregates": {
+    "latency_ms": 0.0,
+    "stage_latency_ms": {
+      "stage.query_norm": 0.0
+    },
+    "counters": {},
+    "errors": []
+  },
+  "providers": {
+    "embedder": {
+      "provider_id": "embedder.fake"
+    }
+  },
+  "replay": {
+    "query_hash": "h"
+  }
+}
