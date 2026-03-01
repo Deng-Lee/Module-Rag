@@ -5804,7 +5804,7 @@ Tool 契约（List）：`library.list_documents`
 | F-3 | Provider 归因快照 | 完成 | 2026-02-28 | `providers_snapshot` 注入 TraceEnvelope + 运行时快照 |
 | F-4 | aggregates 生成 | 完成 | 2026-02-28 | `compute_aggregates` 由 spans/events 生成 stage_latency/counters/errors |
 | F-5 | SQLite sink + readers（不重复存储） | 完成 | 2026-02-28 | `SqliteTraceSink/SqliteTraceReader` + list/get/paging |
-| F-6 | 回放键 replay keys | 未完成 |  | `query_hash/file_sha256/ranked_chunk_ids` |
+| F-6 | 回放键 replay keys | 完成 | 2026-02-28 | `query_hash/file_sha256/ranked_chunk_ids` 写入 TraceEnvelope.replay |
 | F-7 | golden trace 回归 | 未完成 |  | schema + golden/快照断言 |
 | F-8 | 稳定性契约回归（ID/规范化/切分） | 未完成 |  | canonical/chunk_id/asset_id/ref_id 测试 |
 

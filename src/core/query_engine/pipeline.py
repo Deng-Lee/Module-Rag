@@ -39,6 +39,12 @@ class QueryPipeline:
 
         with obs.with_stage("query_norm"):
             q = query_norm(query)
+            obs.event("query.normalized", {"query_hash": q.query_hash, "rewrite_used": q.rewrite_used})
+            ctx = TraceContext.current()
+            if ctx is not None:
+                ctx.replay_keys["query_hash"] = q.query_hash
+                if q.rewrite_used:
+                    ctx.replay_keys["rewrite_used"] = True
 
         with obs.with_stage("retrieve_dense", {"top_k": params.top_k}):
             dense = self.retrieve_dense.run(q, runtime, params)
@@ -55,6 +61,9 @@ class QueryPipeline:
 
         with obs.with_stage("rerank"):
             ranked = self.rerank.run(q=q, runtime=runtime, params=params, ranked=ranked)
+            ctx = TraceContext.current()
+            if ctx is not None:
+                ctx.replay_keys["ranked_chunk_ids"] = [r.chunk_id for r in ranked[: max(0, params.top_k)]]
 
         with obs.with_stage("context_build"):
             bundle = self.context_build.run(q=q, runtime=runtime, params=params, ranked=ranked)

@@ -18,6 +18,7 @@ ALLOWED_EVENT_KINDS: set[str] = {
     "retrieval.candidates",
     "retrieval.fused",
     "fusion.ranked",
+    "query.normalized",
     "rerank.ranked",
     "rerank.used",
     "rerank.skipped",
@@ -26,6 +27,7 @@ ALLOWED_EVENT_KINDS: set[str] = {
     "generate.used",
     "generate.skipped",
     "warn.generate_fallback",
+    "ingest.dedup_decision",
     "ingest.upsert_result",
     "metric",
     "error",
@@ -126,6 +128,7 @@ class TraceEnvelope:
     events: list[EventRecord] = field(default_factory=list)  # trace-level events
     aggregates: JsonDict = field(default_factory=dict)
     providers: JsonDict = field(default_factory=dict)
+    replay: JsonDict = field(default_factory=dict)
     schema_version: str = TRACE_SCHEMA_VERSION
 
     def to_dict(self) -> JsonDict:
@@ -141,6 +144,7 @@ class TraceEnvelope:
             "events": [e.to_dict() for e in self.events],
             "aggregates": self.aggregates,
             "providers": self.providers,
+            "replay": self.replay,
         }
 
     def validate(self, *, strict: bool = True) -> None:

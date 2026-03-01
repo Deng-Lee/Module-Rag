@@ -21,6 +21,7 @@ class QueryParams:
 class QueryIR:
     query_raw: str
     query_norm: str
+    query_hash: str
 
     rewrite_used: bool = False
     query_rewritten: str | None = None

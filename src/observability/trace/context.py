@@ -42,6 +42,7 @@ class TraceContext:
     _span_order: list[str] = field(default_factory=list)
     _trace_events: list[EventRecord] = field(default_factory=list)
     providers_snapshot: dict[str, dict[str, Any]] = field(default_factory=dict)
+    replay_keys: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def new(
@@ -154,6 +155,7 @@ class TraceContext:
             events=list(self._trace_events),
             aggregates={},
             providers=dict(self.providers_snapshot),
+            replay=dict(self.replay_keys),
         )
         envelope.aggregates = compute_aggregates(envelope)
         # Best-effort: notify observability sink, if configured.

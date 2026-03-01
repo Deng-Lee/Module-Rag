@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from hashlib import sha256
 from pathlib import Path
 
 from src.core.runners import QueryRunner
@@ -78,6 +79,11 @@ def test_query_runner_spans_and_extractive_response(tmp_path: Path) -> None:
         ev_kinds.extend([e.kind for e in s.events])
     assert "retrieval.candidates" in ev_kinds
     assert "retrieval.fused" in ev_kinds
+
+    # F-6: replay keys include query_hash + ranked_chunk_ids.
+    q_hash = sha256(q.strip().encode("utf-8")).hexdigest()
+    assert resp.trace.replay["query_hash"] == q_hash
+    assert chunk_id in resp.trace.replay.get("ranked_chunk_ids", [])
 
 
 def test_query_runner_empty_query() -> None:
