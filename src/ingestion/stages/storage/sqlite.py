@@ -287,6 +287,24 @@ class SqliteStore:
             )
         return out
 
+    def count_docs(self) -> int:
+        sql = "SELECT COUNT(*) AS c FROM doc_versions"
+        with self._connect() as conn:
+            row = conn.execute(sql).fetchone()
+        return int(row["c"] if row else 0)
+
+    def count_chunks(self) -> int:
+        sql = "SELECT COUNT(*) AS c FROM chunks"
+        with self._connect() as conn:
+            row = conn.execute(sql).fetchone()
+        return int(row["c"] if row else 0)
+
+    def count_assets(self) -> int:
+        sql = "SELECT COUNT(*) AS c FROM assets"
+        with self._connect() as conn:
+            row = conn.execute(sql).fetchone()
+        return int(row["c"] if row else 0)
+
     def upsert_asset(self, asset_id: str, rel_path: str | None = None) -> None:
         ts = time.time()
         with self._connect() as conn:

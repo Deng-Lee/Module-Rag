@@ -3621,29 +3621,29 @@ MODULE-RAG/
 │       │   └── sqlite.py               # Trace/Eval 落 SQLite（可选）
 │       └── dashboard/
 │           ├── __init__.py
-│           ├── app.py                  # Dashboard WebApp（FastAPI/ASGI）：路由装配 + 静态资源挂载
-│           ├── entry.py                # 启动入口（读取 settings，注入读库依赖，启动 uvicorn）
-│           ├── deps.py                 # 依赖注入（SQLite/JSONL readers、分页器、权限/限额预留）
-│           ├── api.py                  # Read API（为页面提供 JSON：overview/traces/eval/trends）
-│           ├── routes/                 # 6 大页面：1 page = 1 route file（避免巨型 router）
-│           │   ├── overview.py         # 页面1：系统总览（组件配置/资产/健康指标）
-│           │   ├── browser.py          # 页面2：数据浏览器（文档列表/chunk 详情）
-│           │   ├── ingestion_mgr.py    # 页面3：ingestion 管理器（选择/摄取/删除）
-│           │   ├── ingestion_trace.py  # 页面4：ingestion 追踪（单次 + 历史）
-│           │   ├── query_trace.py      # 页面5：query 追踪（单次 + 历史）
-│           │   └── eval_panel.py       # 页面6：评估面板（启动/趋势/对比）
-│           ├── templates/              # HTML 模板（Skeleton + 各页面 layout）
-│           │   ├── base.html
-│           │   ├── overview.html
-│           │   ├── browser.html
-│           │   ├── ingestion_mgr.html
-│           │   ├── ingestion_trace.html
-│           │   ├── query_trace.html
-│           │   └── eval_panel.html
-│           └── static/                 # 前端资源（零侵入渲染：按 span/event 自描述动态渲染）
-│               ├── app.js
-│               ├── charts.js
-│               └── styles.css
+│           ├── app.py                  # Dashboard API-only（FastAPI/ASGI）：只挂载 /api
+│           ├── entry.py                # 启动入口（读取 settings，启动 uvicorn）
+│           ├── deps.py                 # 依赖注入（SQLite/JSONL readers）
+│           └── api.py                  # Read/Manage API（overview/traces/documents/ingest/delete/eval）
+│
+├── web/                                # Dashboard Frontend（Vite + React + TS）
+│   ├── package.json                    # 前端依赖与脚本
+│   ├── vite.config.ts                  # dev server + /api proxy
+│   ├── tsconfig.json                   # TS 配置
+│   ├── index.html
+│   └── src/
+│       ├── main.tsx
+│       ├── App.tsx
+│       ├── api/
+│       │   └── client.ts               # API client（/api）
+│       ├── routes/
+│       │   ├── Overview.tsx
+│       │   ├── Browser.tsx
+│       │   ├── Ingestion.tsx
+│       │   ├── IngestionTrace.tsx
+│       │   ├── QueryTrace.tsx
+│       │   └── EvalPanel.tsx
+│       └── styles.css
 │
 ├── data/                               # 运行数据（事实层与资产，非代码）
 │   ├── raw/                            # 原始上传文件（pdf/md）
@@ -3710,7 +3710,7 @@ MODULE-RAG/
 6. **观测与回放层（Observability & Replay）**
 * TraceEnvelope（IngestionTrace/QueryTrace）定义（3.5.2），结构化日志与 Dashboard 双输出（3.5.3）。
 * 读路径与契约：`observability/readers/*` + `observability/schema/*`，确保“可回溯但不重复存储”与自描述遥测可被 UI 动态渲染。
-* Dashboard 提供完整访问入口：`observability/dashboard/entry.py` 启动 WebApp，`routes/*` 承载六大页面（3.5.5）。
+* Dashboard 提供完整访问入口：`observability/dashboard/entry.py` 启动 **API-only** 服务（前端由 Vite/React 独立托管）。
 
 7. **评估层（Evaluation Layer）**
 * Dataset/MetricSet/Judge/Evaluator 抽象（3.4.8），质量门禁与评测执行口径（4.5）。
@@ -3892,7 +3892,7 @@ B) Dashboard（Web）
 6. **阶段 F：Trace 打点增强与回放友好**
 * 主要目的：在已有最小 trace 闭环上补齐关键 `event.kind`、聚合指标与错误分级；确保 ingestion/query 双链路可比较、可回放、可诊断。
 
-7. **阶段 G：可视化管理平台 Dashboard（WebApp：FastAPI/ASGI + routes/templates/static）**
+7. **阶段 G：可视化管理平台 Dashboard（前端：Vite+React+TS；后端：FastAPI API-only）**
 * 主要目的：落地六大页面（总览/数据浏览/ingestion 管理/ingestion 追踪/query 追踪/评估面板占位），并以 `TraceEnvelope` 的自描述数据动态渲染，组件可插拔时无需改 Dashboard 代码。
 
 8. **阶段 H：评估体系**
@@ -5163,31 +5163,31 @@ Tool 契约（List）：`library.list_documents`
 * 单测：golden/快照断言 canonical 与 chunk_id；
 *（可选）性质测试：用 `hypothesis` 覆盖空白/换行/控制字符等边界，验证 canonical 不改变语义但稳定输出。
 
-#### 6.2.7 阶段 G：可视化管理平台 Dashboard（WebApp：FastAPI/ASGI + routes/templates/static）（≈1h/增量）
+#### 6.2.7 阶段 G：可视化管理平台 Dashboard（Vite + React + TypeScript，API 仍由 FastAPI 提供）（≈1h/增量）
 
-本阶段目标是把 `observability/dashboard/*` 落成可运行的 WebApp，并逐步补齐六大页面。核心约束：Dashboard 以 `TraceEnvelope` 的自描述字段（`stage.*`、`event.kind`、aggregates、provider snapshot）动态渲染，不把 provider 细节硬编码在前端；当你替换可插拔组件时，Dashboard 不需要改代码或只需最小适配。
+本阶段目标是把 Dashboard 前端改为 **Vite + React + TypeScript**，后端继续使用 FastAPI 作为只读/管理 API。核心约束不变：Dashboard 以 `TraceEnvelope` 的自描述字段（`stage.*`、`event.kind`、aggregates、provider snapshot）动态渲染，不把 provider 细节硬编码在前端；当你替换可插拔组件时，Dashboard 不需要改代码或只需最小适配。
 
-1. **G-1 Dashboard App 启动入口（ASGI）+ 静态资源挂载**
+1. **G-1 前端工程骨架（Vite + React + TS）+ 本地联调入口**
 
-目的：提供可直接启动的 WebApp 入口，完成路由装配与 static/templates 的挂载；后续页面都基于这个骨架增量开发。
+目的：建立前端工程骨架与开发服务器；后续页面都在 React 路由下增量开发，并通过 Vite proxy 指向后端 API。
 
-修改/新增文件（可见变化）：`src/observability/dashboard/app.py`、`src/observability/dashboard/entry.py`、`src/observability/dashboard/__init__.py`、`src/observability/dashboard/static/styles.css`、`src/observability/dashboard/templates/base.html`。
+修改/新增文件（可见变化）：`web/`（Vite 工程）、`web/index.html`、`web/src/main.tsx`、`web/src/App.tsx`、`web/src/routes/*`、`web/src/api/client.ts`、`web/src/styles.css`、`web/vite.config.ts`、`web/tsconfig.json`。
 
 实现函数（最小集合）：
 
-* `create_app(settings) -> ASGIApp`
-* `main()`（entry：读取 settings，启动 `uvicorn`）
-* `mount_static(app, static_dir) -> None`
+* `App`（前端路由骨架）
+* `apiClient`（统一封装 `/api/*` 调用）
+* `dev` 启动脚本（`npm run dev` 或 `pnpm dev`）
 
 验收标准：
 
-* 本地可启动 dashboard（端口可配置），访问 `/` 返回 200（哪怕只有 placeholder 页面）；
-* 静态资源可访问（例如 `/static/styles.css` 返回 200）。
+* 前端可启动（Vite dev server），访问 `/` 返回页面（哪怕只有 placeholder）；
+* 能正确访问后端 `/api/overview`（开发环境可通过 Vite proxy 解决跨域）。
 
 测试方法：
 
-* 集成：用 FastAPI TestClient 请求 `/` 与 `/static/styles.css`；
-* 手测：启动后浏览器打开首页。
+* 手测：前端 dev server + 后端 API 同时启动，`/` 可加载且能调用 `/api/overview`；
+*（可选）前端单测：简单渲染测试（React Testing Library）。
 
 2. **G-2 读路径打通：dashboard.api + readers（SQLite/JSONL）**
 
@@ -5197,10 +5197,9 @@ Tool 契约（List）：`library.list_documents`
 
 实现函数（最小集合）：
 
-* `get_overview() -> dict`
-* `list_traces(kind, page, filters) -> list[TraceHeader]`
-* `get_trace(trace_id) -> TraceEnvelope`
-* `deps.get_reader(settings) -> TraceReader`
+* `overview()` / `list_traces()` / `get_trace()`（dashboard.api）
+* `list_documents()` / `get_chunk()`（dashboard.api）
+* `deps.get_trace_reader(settings) -> TraceReader`
 
 验收标准：
 
@@ -5212,16 +5211,16 @@ Tool 契约（List）：`library.list_documents`
 * 单测：reader 分页/过滤逻辑（基于临时 jsonl/sqlite）；
 * 集成：TestClient 请求 `/api/traces` 返回 200 且 JSON 结构稳定。
 
-3. **G-3 页面1：系统总览（Overview）**
+3. **G-3 页面1：系统总览（Overview，React 页面）**
 
 目的：落地总览页：展示当前组件配置快照（provider snapshot）、资产统计（doc/chunk/asset 数）、系统健康（最近 N 次 ingestion/query 的耗时与错误率）。
 
-修改/新增文件（可见变化）：`src/observability/dashboard/routes/overview.py`、`src/observability/dashboard/templates/overview.html`、（可选）`src/observability/dashboard/static/app.js`。
+修改/新增文件（可见变化）：`web/src/routes/Overview.tsx`、`web/src/api/client.ts`。
 
 实现函数（最小集合）：
 
-* `render_overview(request) -> HTMLResponse`
-* `api.overview_summary() -> dict`（如果与 `get_overview` 拆分）
+* `Overview.tsx`（前端页面）
+* `GET /api/overview`（后端数据接口）
 
 验收标准：
 
@@ -5230,20 +5229,19 @@ Tool 契约（List）：`library.list_documents`
 
 测试方法：
 
-* 集成：TestClient 请求 `/overview` 返回 200，页面包含关键字段（可简单 substring 断言）；
-* 集成：overview API 返回的数据字段完整。
+* 集成：TestClient 请求 `/api/overview` 返回 200 且字段完整；
+* 手测：前端 Overview 页面能展示 API 返回字段。
 
-4. **G-4 页面2：数据浏览器（Documents/Chunks/Assets）**
+4. **G-4 页面2：数据浏览器（Documents/Chunks/Assets，React 页面）**
 
 目的：落地数据浏览能力：文档列表、chunk 详情、资产列表（仅元数据 + thumb 预览链接）；用于快速定位“哪个文档/哪个 chunk 命中”。
 
-修改/新增文件（可见变化）：`src/observability/dashboard/routes/browser.py`、`src/observability/dashboard/templates/browser.html`、（可选）`src/observability/dashboard/static/app.js`。
+修改/新增文件（可见变化）：`web/src/routes/Browser.tsx`。
 
 实现函数（最小集合）：
 
-* `render_browser(request) -> HTMLResponse`
-* `api.list_documents(page, filters) -> dict`
-* `api.get_chunk(chunk_id) -> dict`
+* `Browser.tsx`（前端页面）
+* `GET /api/documents`、`GET /api/chunk/{chunk_id}`
 
 验收标准：
 
@@ -5252,19 +5250,19 @@ Tool 契约（List）：`library.list_documents`
 
 测试方法：
 
-* 集成：基于阶段 C 的 SQLite，TestClient 请求 `/browser` 与 `/api/chunk/{id}` 返回 200；
-* 单测：chunk -> citations 的格式化与去重（复用 core/response/citations）。
+* 集成：TestClient 请求 `/api/documents` 与 `/api/chunk/{id}` 返回 200；
+* 手测：Browser 页面能列出文档/Chunk 并展示详情。
 
-5. **G-5 页面3：Ingestion 管理器（摄取/删除）**
+5. **G-5 页面3：Ingestion 管理器（摄取/删除，React 页面）**
 
 目的：提供最小可用的 ingestion 管理操作：选择 fixture 或输入路径触发摄取、按 doc/version 删除（先做软删除/标记也可），并展示操作结果与 trace_id。
 
-修改/新增文件（可见变化）：`src/observability/dashboard/routes/ingestion_mgr.py`、`src/observability/dashboard/templates/ingestion_mgr.html`、（可选）`src/observability/dashboard/deps.py`（注入 ingestion runner）。
+修改/新增文件（可见变化）：`web/src/routes/Ingestion.tsx`。
 
 实现函数（最小集合）：
 
-* `post_ingest(request) -> JSONResponse`
-* `post_delete(request) -> JSONResponse`
+* `Ingestion.tsx`（前端页面）
+* `POST /api/ingest`、`POST /api/delete`
 
 验收标准：
 
@@ -5273,42 +5271,40 @@ Tool 契约（List）：`library.list_documents`
 
 测试方法：
 
-* e2e：TestClient 发 POST ingest，随后 browser 页能看到新增文档；
-* e2e：DELETE 后查询/浏览不再展示（或标记为 deleted）。
+* e2e：TestClient 发 POST `/api/ingest` 返回 200；
+* e2e：TestClient 发 POST `/api/delete` 返回 200（软删/硬删策略由后端决定）。
 
-6. **G-6 页面4/5：Ingestion Trace / Query Trace（单次 + 历史列表）**
+6. **G-6 页面4/5：Ingestion Trace / Query Trace（单次 + 历史列表，React 页面）**
 
 目的：落地两类追踪页面：查看单次 trace 的 spans/events/aggregates，以及历史列表对比（按策略过滤），用于性能与质量诊断。
 
-修改/新增文件（可见变化）：`src/observability/dashboard/routes/ingestion_trace.py`、`src/observability/dashboard/routes/query_trace.py`、对应 `templates/*_trace.html`、（可选）`static/charts.js`。
+修改/新增文件（可见变化）：`web/src/routes/IngestionTrace.tsx`、`web/src/routes/QueryTrace.tsx`。
 
 实现函数（最小集合）：
 
-* `render_ingestion_trace(request, trace_id=None) -> HTMLResponse`
-* `render_query_trace(request, trace_id=None) -> HTMLResponse`
-* `api.trace_detail(trace_id) -> dict`（封装 spans/events 的截断与排序）
+* `IngestionTrace.tsx` / `QueryTrace.tsx`（前端页面）
+* `GET /api/traces`、`GET /api/trace/{trace_id}`
 
 验收标准：
 
-* 能展示至少：stage 耗时表（来自 aggregates）、关键事件列表（按 event.kind 分组）；
+* 能展示至少：trace 列表 + 单条 trace 的基本字段（trace_id/status/duration/providers）；
 * trace 列表支持分页与策略过滤，点击进入详情页。
 
 测试方法：
 
 * 集成：对已有 trace_id 请求详情 API 返回 200 且字段完整；
-* 单测：event 截断规则（超长 payload 不爆炸）与排序规则稳定。
+* 手测：Trace 页面能正确渲染列表与详情 JSON。
 
-7. **G-7 页面6：评估面板（占位 → 可触发 EvalRunner → 趋势图）**
+7. **G-7 页面6：评估面板（占位 → 可触发 EvalRunner → 趋势图，React 页面）**
 
 目的：先做可运行占位：能选择评估后端与数据集并触发一次评估 run（即使指标很少），并在页面展示历史趋势（从 readers/sqlite 读取）。
 
-修改/新增文件（可见变化）：`src/observability/dashboard/routes/eval_panel.py`、`src/observability/dashboard/templates/eval_panel.html`、（可选）`src/observability/dashboard/static/charts.js`。
+修改/新增文件（可见变化）：`web/src/routes/EvalPanel.tsx`。
 
 实现函数（最小集合）：
 
-* `post_run_eval(request) -> JSONResponse`
-* `api.list_eval_runs(page, filters) -> dict`
-* `api.eval_trends(metric, window) -> dict`
+* `EvalPanel.tsx`（前端页面）
+* `POST /api/eval/run`、`GET /api/eval/runs`、`GET /api/eval/trends`
 
 验收标准：
 
@@ -5317,14 +5313,14 @@ Tool 契约（List）：`library.list_documents`
 
 测试方法：
 
-* 集成：TestClient POST `/eval/run` 返回 200；随后 `/api/eval/runs` 能查到记录；
-* 单测：趋势聚合函数（按时间窗口汇总）输出稳定。
+* 集成：TestClient POST `/api/eval/run` 返回 200；`/api/eval/runs` 返回 200；
+* 手测：Eval Panel 能触发 run 并展示占位结果。
 
 8. **G-8 Dashboard 冒烟与回归（页面级不易碎）**
 
 目的：固化 dashboard 的回归测试：保证升级/重构后页面入口与 API 不挂；测试尽量不做脆弱的 DOM 断言，而验证“关键数据字段存在 + HTTP 200”。
 
-修改/新增文件（可见变化）：`tests/e2e/test_dashboard_smoke.py`（或同类）、（可选）`tests/golden/dashboard_api/*.json`。
+修改/新增文件（可见变化）：`tests/e2e/test_dashboard_smoke.py`、（可选）`tests/golden/dashboard_api/*.json`。
 
 实现函数（最小集合）：
 
@@ -5333,13 +5329,13 @@ Tool 契约（List）：`library.list_documents`
 
 验收标准：
 
-* 六大页面路由均返回 200（即使部分是占位）；
-* 核心 API（overview/traces/trace_detail/eval_runs）返回结构稳定。
+* 核心 API（overview/traces/trace_detail/eval_runs）返回结构稳定；
+* e2e 冒烟通过（`tests/e2e/test_dashboard_smoke.py`）。
 
 测试方法：
 
-* `pytest -q -m e2e` 跑 dashboard smoke；
-* （可选）对关键 API 做 schema/golden 校验，避免静态页面断言过脆。
+* `pytest -q -m e2e` 跑 dashboard smoke（仅校验 API 200 + JSON shape）；
+* 前端可用性以手测为主，避免 DOM 断言过脆。
 
 #### 6.2.8 阶段 H：评估体系（≈1h/增量）
 
@@ -5812,14 +5808,14 @@ Tool 契约（List）：`library.list_documents`
 
 | 任务编号 | 任务名称 | 状态 | 完成日期 | 备注（关键实现） |
 |---|---|---|---|---|
-| G-1 | Dashboard App 入口 + static 挂载 | 未完成 |  | `create_app/main/mount_static` |
-| G-2 | dashboard.api + readers（分页/过滤） | 未完成 |  | `/api/traces`、`get_trace` |
-| G-3 | 页面1：Overview | 未完成 |  | provider snapshot + 资产统计 + 健康 |
-| G-4 | 页面2：Browser | 未完成 |  | doc/chunk/asset 浏览 + chunk 详情 |
-| G-5 | 页面3：Ingestion 管理器 | 未完成 |  | 触发 ingest/delete + trace_id 展示 |
-| G-6 | 页面4/5：Trace 追踪 | 未完成 |  | trace 列表 + 详情（spans/events/aggregates） |
-| G-7 | 页面6：Eval Panel（占位→可触发） | 未完成 |  | `/eval/run` + 历史/趋势 |
-| G-8 | Dashboard smoke 回归 | 未完成 |  | 路由 200 + API shape 断言 |
+| G-1 | Dashboard API-only 入口 | 完成 | 2026-03-01 | `create_app/main`（仅挂载 /api） |
+| G-2 | dashboard.api + readers（分页/过滤） | 完成 | 2026-03-02 | `/api/overview`、`/api/traces`、`/api/trace/{id}` + readers |
+| G-3 | 页面1：Overview | 完成 | 2026-03-02 | React Overview + `/api/overview` |
+| G-4 | 页面2：Browser | 完成 | 2026-03-02 | React Browser + `/api/documents`/`/api/chunk/{id}` |
+| G-5 | 页面3：Ingestion 管理器 | 完成 | 2026-03-02 | React Ingestion + `/api/ingest`/`/api/delete` |
+| G-6 | 页面4/5：Trace 追踪 | 完成 | 2026-03-02 | React Trace 列表 + `/api/traces`/`/api/trace/{id}` |
+| G-7 | 页面6：Eval Panel（占位→可触发） | 完成 | 2026-03-02 | React Eval Panel + `/api/eval/*` |
+| G-8 | Dashboard smoke 回归 | 完成 | 2026-03-02 | `tests/e2e/test_dashboard_smoke.py` |
 
 #### 6.4.8 阶段 H
 
