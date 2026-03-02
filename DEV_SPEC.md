@@ -5836,7 +5836,7 @@ Tool 契约（List）：`library.list_documents`
 |---|---|---|---|---|
 | I-1 | 一键工作流脚本化 | 完成 | 2026-03-02 | `scripts/dev_ingest.sh/dev_query.sh/dev_eval.sh/dev_dashboard.sh` |
 | I-2 | MCP stdio 黑盒 E2E | 完成 | 2026-03-02 | `tests/e2e/test_mcp_stdio.py` |
-| I-3 | Dashboard 冒烟（真实数据） | 未完成 |  | 6 页面 + 关键 API shape |
+| I-3 | Dashboard 冒烟（真实数据） | 完成 | 2026-03-02 | `tests/e2e/test_dashboard_real_data.py` |
 | I-4 | Golden 回归基线收口 | 未完成 |  | `make_golden.sh` + diff helper |
 | I-5 | README/排障文档收口 | 未完成 |  | Quickstart + trace_id 定位指南 |
 
