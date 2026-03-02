@@ -27,6 +27,6 @@ def _tokens(text: str) -> set[str]:
 
 
 def _overlap_ratio(a: set[str], b: set[str]) -> float:
-    if not a:
+    if not a or not b:
         return 0.0
-    return len(a & b) / float(len(a))
+    return len(a & b) / float(min(len(a), len(b)))

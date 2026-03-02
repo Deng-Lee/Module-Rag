@@ -5828,7 +5828,7 @@ Tool 契约（List）：`library.list_documents`
 | H-5 | EvalRunner（回放 QueryRunner，多策略对比） | 完成 | 2026-03-02 | `EvalRunner` + run_output 组装 + 集成测试 |
 | H-6 | Eval 产物落 SQLite + reader | 完成 | 2026-03-02 | `eval_runs/eval_case_results` + list API |
 | H-7 | RAGAS/DeepEval 适配器（可选） | 完成 | 2026-03-02 | 适配器 stub + 缺依赖结构化错误 |
-| H-8 | 质量门禁（阈值断言 + 报告） | 未完成 |  | `assert_metrics_ge` + failure report |
+| H-8 | 质量门禁（阈值断言 + 报告） | 完成 | 2026-03-02 | `assert_metrics_ge` + failure report + 集成门禁测试 |
 
 #### 6.4.9 阶段 I
 
