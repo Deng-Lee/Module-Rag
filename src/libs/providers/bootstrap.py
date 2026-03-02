@@ -10,6 +10,7 @@ from .reranker.noop import NoopReranker
 from .splitter.markdown_headings import MarkdownHeadingsSectioner
 from .splitter.recursive_chunker import RecursiveCharChunkerWithinSection
 from .splitter.simple_chunker import SimpleCharChunkerWithinSection
+from .evaluator.fake_judge import FakeJudge
 from .vector_store.in_memory import InMemoryVectorIndex
 from .vector_store.chroma_lite import ChromaLiteVectorIndex
 from .vector_store.chroma_retriever import ChromaDenseRetriever
@@ -35,3 +36,4 @@ def register_builtin_providers(registry: ProviderRegistry) -> None:
     registry.register("sparse_retriever", "sparse_retriever.fts5", Fts5Retriever)
     registry.register("fusion", "fusion.rrf", RrfFusion)
     registry.register("reranker", "reranker.noop", NoopReranker)
+    registry.register("judge", "judge.fake", FakeJudge)
