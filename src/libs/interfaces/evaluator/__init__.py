@@ -1,4 +1,4 @@
-from .evaluator import EvalReport, Evaluator
+from .evaluator import EvalCaseResult, EvalReport, Evaluator
 from .judge import Judge, JudgeScore
 
-__all__ = ["Evaluator", "EvalReport", "Judge", "JudgeScore"]
+__all__ = ["Evaluator", "EvalReport", "EvalCaseResult", "Judge", "JudgeScore"]

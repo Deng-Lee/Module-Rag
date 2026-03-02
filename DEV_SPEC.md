@@ -5824,7 +5824,7 @@ Tool 契约（List）：`library.list_documents`
 | H-1 | Dataset 契约 + 最小数据集 | 完成 | 2026-03-02 | `core.eval.dataset` + `rag_eval_small.yaml` + dataset 单测 |
 | H-2 | 检索指标 MetricSet（Hit/MRR/nDCG） | 完成 | 2026-03-02 | `core.eval.metricset` + retrieval metrics + 单测 |
 | H-3 | 生成指标 Judge（FakeJudge/LLM Judge） | 完成 | 2026-03-02 | `FakeJudge` + `GenerationMetricSet` + 单测 |
-| H-4 | Evaluator 抽象 + Composite | 未完成 |  | 指标合并/命名空间 |
+| H-4 | Evaluator 抽象 + Composite | 完成 | 2026-03-02 | `CompositeEvaluator` + 命名空间合并 + 单测 |
 | H-5 | EvalRunner（回放 QueryRunner，多策略对比） | 未完成 |  | `run_one_case` + trace_id 关联 |
 | H-6 | Eval 产物落 SQLite + reader | 未完成 |  | `eval_runs/eval_case_results` |
 | H-7 | RAGAS/DeepEval 适配器（可选） | 未完成 |  | 缺依赖返回结构化错误 |

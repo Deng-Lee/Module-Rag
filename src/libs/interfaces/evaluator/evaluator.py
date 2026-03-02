@@ -11,6 +11,16 @@ class EvalReport:
     artifacts: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass
+class EvalCaseResult:
+    case_id: str
+    metrics: dict[str, float] = field(default_factory=dict)
+    artifacts: dict[str, Any] = field(default_factory=dict)
+
+
 class Evaluator(Protocol):
     def run(self, dataset_id: str, strategy_config_id: str, mode: str = "offline") -> EvalReport:
+        ...
+
+    def evaluate_case(self, case: Any, run_output: dict[str, Any]) -> EvalCaseResult:
         ...
