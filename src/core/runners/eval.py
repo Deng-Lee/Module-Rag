@@ -12,6 +12,9 @@ from ..response import ResponseIR
 from ..strategy import load_settings
 from .query import QueryRunner
 from ...ingestion.stages.storage.sqlite import SqliteStore
+from ...libs.factories.evaluator import make_evaluator
+from ...libs.providers import register_builtin_providers
+from ...libs.registry import ProviderRegistry
 from ...libs.providers.evaluator.fake_judge import FakeJudge
 
 
@@ -50,10 +53,20 @@ class EvalRunner:
 
         sqlite = SqliteStore(db_path=settings.paths.sqlite_dir / "app.sqlite")
 
-        evaluator = CompositeEvaluator(
-            metric_sets={"retrieval": MetricSet(k=top_k), "generation": GenerationMetricSet()},
-            judge=FakeJudge(),
-        )
+        registry = ProviderRegistry()
+        register_builtin_providers(registry)
+
+        evaluator = None
+        try:
+            evaluator = make_evaluator(settings.raw, registry)
+        except Exception:
+            evaluator = None
+
+        if evaluator is None:
+            evaluator = CompositeEvaluator(
+                metric_sets={"retrieval": MetricSet(k=top_k), "generation": GenerationMetricSet()},
+                judge=FakeJudge(),
+            )
 
         cases_out: list[EvalCaseRun] = []
         aggregates: dict[str, list[float]] = {}

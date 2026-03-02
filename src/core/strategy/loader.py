@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -96,6 +97,16 @@ def _load_yaml_mapping(p: Path) -> dict[str, Any]:
     return raw
 
 
+def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    out = dict(base)
+    for k, v in override.items():
+        if k in out and isinstance(out[k], dict) and isinstance(v, dict):
+            out[k] = _deep_merge(out[k], v)
+        else:
+            out[k] = v
+    return out
+
+
 def load_settings(path: str | Path) -> Settings:
     """
     Load `config/settings.yaml` (workspace-local).
@@ -107,6 +118,16 @@ def load_settings(path: str | Path) -> Settings:
     root = p.parent.parent  # .../config/settings.yaml -> repo root
 
     raw = _load_yaml_mapping(p)
+
+    # Optional private overrides (not committed). Controlled by env or default path.
+    override_path = os.environ.get("MODULE_RAG_SECRETS_PATH")
+    if override_path:
+        ov = Path(override_path).expanduser()
+    else:
+        ov = (p.parent / "local.override.yaml").resolve()
+    if ov.exists() and ov.is_file():
+        raw_override = _load_yaml_mapping(ov)
+        raw = _deep_merge(raw, raw_override)
     s = Settings.from_dict(raw)
 
     # normalize paths relative to repo root

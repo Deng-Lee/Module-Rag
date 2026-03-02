@@ -20,3 +20,8 @@ venv/
 # local notes (do not commit)
 interview.md
 INTERVIEW.md
+
+# local/private config (do not commit)
+config/local.override.yaml
+config/secrets.yaml
+config/model_endpoints.local.yaml
