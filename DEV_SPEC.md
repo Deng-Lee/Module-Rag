@@ -5821,7 +5821,7 @@ Tool 契约（List）：`library.list_documents`
 
 | 任务编号 | 任务名称 | 状态 | 完成日期 | 备注（关键实现） |
 |---|---|---|---|---|
-| H-1 | Dataset 契约 + 最小数据集 | 未完成 |  | `load_dataset/iter_cases` |
+| H-1 | Dataset 契约 + 最小数据集 | 完成 | 2026-03-02 | `core.eval.dataset` + `rag_eval_small.yaml` + dataset 单测 |
 | H-2 | 检索指标 MetricSet（Hit/MRR/nDCG） | 未完成 |  | 口径固定 + 边界处理 |
 | H-3 | 生成指标 Judge（FakeJudge/LLM Judge） | 未完成 |  | `Faithfulness/Relevancy` |
 | H-4 | Evaluator 抽象 + Composite | 未完成 |  | 指标合并/命名空间 |

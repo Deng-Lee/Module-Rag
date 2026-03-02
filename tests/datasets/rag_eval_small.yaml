@@ -1,0 +1,31 @@
+{
+  "dataset_id": "rag_eval_small",
+  "version": "0.1",
+  "description": "Minimal eval dataset for regression sanity checks.",
+  "cases": [
+    {
+      "case_id": "case_cache_001",
+      "query": "What does canonical() normalize for stable embedding cache?",
+      "tags": ["retrieval", "cache"],
+      "expected": {
+        "keywords": ["canonical", "content_hash", "text_norm_profile_id"]
+      }
+    },
+    {
+      "case_id": "case_fts5_001",
+      "query": "Explain SQLite FTS5 inverted index and BM25.",
+      "tags": ["retrieval", "fts5"],
+      "expected": {
+        "keywords": ["FTS5", "BM25", "inverted index"]
+      }
+    },
+    {
+      "case_id": "case_rrf_001",
+      "query": "What is RRF used for in hybrid retrieval?",
+      "tags": ["retrieval", "fusion"],
+      "expected": {
+        "keywords": ["RRF", "fusion", "hybrid"]
+      }
+    }
+  ]
+}
