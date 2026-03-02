@@ -5542,7 +5542,7 @@ Tool 契约（List）：`library.list_documents`
 
 2. **I-2 MCP Client 模拟（stdio）端到端测试**
 
-目的：把 MCP server 作为黑盒验证：模拟 client 通过 stdio JSON-RPC 调用 `tools/list` 与四个 tools，并断言输出契约稳定。
+目的：把 MCP server 作为黑盒验证：模拟 client 通过 stdio JSON-RPC 调用 `tools/list` 与当前全部核心 tools，并断言输出契约稳定。
 
 修改/新增文件（可见变化）：`tests/e2e/test_mcp_stdio.py`（或同类）、（可选）`scripts/mcp_client_smoke.py`。
 
@@ -5554,9 +5554,9 @@ Tool 契约（List）：`library.list_documents`
 
 验收标准：
 
-* `tools/list` 返回核心 tools 且 schema 字段完整（至少包含：`library.ingest/query/query_assets/get_document`，如已实现管理 tools 也应包含 `list/delete`）；
+* `tools/list` 返回核心 tools 且 schema 字段完整（至少包含：`library.ingest`、`library.query`、`library.query_assets`、`library.get_document`、`library.list_documents`、`library.delete_document`、`library.ping`）；
 * 完整链路：`library.ingest` → `library.query` → `library.query_assets` → `library.get_document` 均返回 200 等价成功响应，且 `trace_id` 可回溯；
-*（如启用管理 tools）`list_documents`/`delete_document` 的 e2e 覆盖：删除后 query 不再命中已删除数据。
+* 管理类 tools 覆盖：`library.list_documents`/`library.delete_document` 可用，删除后 query 不再命中已删除数据。
 
 测试方法：
 
@@ -5835,7 +5835,7 @@ Tool 契约（List）：`library.list_documents`
 | 任务编号 | 任务名称 | 状态 | 完成日期 | 备注（关键实现） |
 |---|---|---|---|---|
 | I-1 | 一键工作流脚本化 | 完成 | 2026-03-02 | `scripts/dev_ingest.sh/dev_query.sh/dev_eval.sh/dev_dashboard.sh` |
-| I-2 | MCP stdio 黑盒 E2E | 未完成 |  | spawn server + tools/call 链路 |
+| I-2 | MCP stdio 黑盒 E2E | 完成 | 2026-03-02 | `tests/e2e/test_mcp_stdio.py` |
 | I-3 | Dashboard 冒烟（真实数据） | 未完成 |  | 6 页面 + 关键 API shape |
 | I-4 | Golden 回归基线收口 | 未完成 |  | `make_golden.sh` + diff helper |
 | I-5 | README/排障文档收口 | 未完成 |  | Quickstart + trace_id 定位指南 |
