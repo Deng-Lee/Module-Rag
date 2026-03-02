@@ -5838,7 +5838,7 @@ Tool 契约（List）：`library.list_documents`
 | I-2 | MCP stdio 黑盒 E2E | 完成 | 2026-03-02 | `tests/e2e/test_mcp_stdio.py` |
 | I-3 | Dashboard 冒烟（真实数据） | 完成 | 2026-03-02 | `tests/e2e/test_dashboard_real_data.py` |
 | I-4 | Golden 回归基线收口 | 完成 | 2026-03-02 | `scripts/make_golden.sh` + `scripts/diff_golden.sh` |
-| I-5 | README/排障文档收口 | 未完成 |  | Quickstart + trace_id 定位指南 |
+| I-5 | README/排障文档收口 | 完成 | 2026-03-02 | Quickstart + trace_id 定位指南 |
 
 ---
 
