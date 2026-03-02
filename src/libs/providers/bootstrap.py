@@ -12,6 +12,8 @@ from .splitter.recursive_chunker import RecursiveCharChunkerWithinSection
 from .splitter.simple_chunker import SimpleCharChunkerWithinSection
 from .evaluator.fake_judge import FakeJudge
 from .evaluator.composite import CompositeEvaluatorProvider
+from .evaluator.ragas_adapter import RagasAdapter
+from .evaluator.deepeval_adapter import DeepEvalAdapter
 from .vector_store.in_memory import InMemoryVectorIndex
 from .vector_store.chroma_lite import ChromaLiteVectorIndex
 from .vector_store.chroma_retriever import ChromaDenseRetriever
@@ -39,3 +41,5 @@ def register_builtin_providers(registry: ProviderRegistry) -> None:
     registry.register("reranker", "reranker.noop", NoopReranker)
     registry.register("judge", "judge.fake", FakeJudge)
     registry.register("evaluator", "evaluator.composite", CompositeEvaluatorProvider)
+    registry.register("evaluator", "evaluator.ragas", RagasAdapter)
+    registry.register("evaluator", "evaluator.deepeval", DeepEvalAdapter)
