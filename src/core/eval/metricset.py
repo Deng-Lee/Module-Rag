@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Any
 
 from .dataset import EvalCase
@@ -13,7 +14,12 @@ class MetricSet:
 
     def compute(self, case: EvalCase, run_output: dict[str, Any]) -> dict[str, float]:
         ranked = _extract_ranked_ids(run_output)
-        expected = case.expected_chunk_ids or case.expected_doc_ids or case.expected_keywords
+        if case.expected_keywords:
+            texts = _extract_ranked_texts(run_output)
+            if texts:
+                return _compute_keyword_metrics(texts, case.expected_keywords, self.k)
+
+        expected = case.expected_chunk_ids or case.expected_doc_ids
         return {
             f"hit_rate@{self.k}": hit_rate_at_k(ranked, expected, self.k),
             "mrr": mrr(ranked, expected),
@@ -31,3 +37,39 @@ def _extract_ranked_ids(run_output: dict[str, Any]) -> list[str]:
                 ids.append(str(item["chunk_id"]))
         return ids
     return []
+
+
+def _extract_ranked_texts(run_output: dict[str, Any]) -> list[str]:
+    texts = run_output.get("retrieved_texts")
+    if isinstance(texts, list):
+        return [str(t) for t in texts]
+    return []
+
+
+def _compute_keyword_metrics(texts: list[str], keywords: list[str], k: int) -> dict[str, float]:
+    rels = [_is_relevant_text(t, keywords) for t in texts[: max(0, k)]]
+    if not rels or k <= 0:
+        return {f"hit_rate@{k}": 0.0, "mrr": 0.0, f"ndcg@{k}": 0.0}
+
+    hit = 1.0 if any(rels) else 0.0
+    mrr_val = 0.0
+    for idx, rel in enumerate(rels, start=1):
+        if rel:
+            mrr_val = 1.0 / float(idx)
+            break
+
+    dcg = 0.0
+    for idx, rel in enumerate(rels, start=1):
+        if rel:
+            dcg += 1.0 / math.log2(idx + 1)
+    idcg = 0.0
+    for idx in range(1, sum(rels) + 1):
+        idcg += 1.0 / math.log2(idx + 1)
+    ndcg_val = (dcg / idcg) if idcg > 0 else 0.0
+
+    return {f"hit_rate@{k}": hit, "mrr": mrr_val, f"ndcg@{k}": ndcg_val}
+
+
+def _is_relevant_text(text: str, keywords: list[str]) -> bool:
+    lower = text.lower()
+    return any(k.lower() in lower for k in keywords)
