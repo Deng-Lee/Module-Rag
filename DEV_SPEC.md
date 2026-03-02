@@ -5834,7 +5834,7 @@ Tool 契约（List）：`library.list_documents`
 
 | 任务编号 | 任务名称 | 状态 | 完成日期 | 备注（关键实现） |
 |---|---|---|---|---|
-| I-1 | 一键工作流脚本化 | 未完成 |  | bootstrap/ingest/query/eval/dashboard 脚本 |
+| I-1 | 一键工作流脚本化 | 完成 | 2026-03-02 | `scripts/dev_ingest.sh/dev_query.sh/dev_eval.sh/dev_dashboard.sh` |
 | I-2 | MCP stdio 黑盒 E2E | 未完成 |  | spawn server + tools/call 链路 |
 | I-3 | Dashboard 冒烟（真实数据） | 未完成 |  | 6 页面 + 关键 API shape |
 | I-4 | Golden 回归基线收口 | 未完成 |  | `make_golden.sh` + diff helper |
