@@ -25,8 +25,8 @@ class PdfLoader:
         p = Path(input_path)
         raw_bytes = p.read_bytes()
 
-        md, pages, warnings = _extract_text(raw_bytes)
-        assets = _extract_image_refs(raw_bytes)
+        md, pages, warnings = _extract_text(raw_bytes, p)
+        assets = _extract_image_refs(raw_bytes, p, warnings)
 
         summary = ParseSummary(
             pages=pages,
@@ -40,8 +40,26 @@ class PdfLoader:
         return LoaderOutput(md=md, assets=assets, parse_summary=summary, doc_id=doc_id, version_id=version_id)
 
 
-def _extract_text(raw: bytes) -> tuple[str, int | None, list[str]]:
+def _extract_text(raw: bytes, path: Path) -> tuple[str, int | None, list[str]]:
     warnings: list[str] = []
+    # Prefer PyMuPDF for higher-quality text extraction if available.
+    try:
+        import fitz  # type: ignore
+
+        doc = fitz.open(path)
+        texts: list[str] = []
+        for i in range(doc.page_count):
+            page = doc.load_page(i)
+            text = page.get_text("text") or ""
+            if text.strip():
+                texts.append(text.strip())
+        md = "\n\n".join(texts)
+        pages = int(doc.page_count)
+        doc.close()
+        return md, pages, warnings
+    except Exception:
+        warnings.append("pymupdf_text_fallback")
+
     try:
         from pypdf import PdfReader  # type: ignore
 
@@ -72,7 +90,54 @@ def _extract_text(raw: bytes) -> tuple[str, int | None, list[str]]:
     return md, pages, warnings
 
 
-def _extract_image_refs(raw: bytes) -> list[AssetRef]:
+def _extract_image_refs(raw: bytes, path: Path, warnings: list[str]) -> list[AssetRef]:
+    # Prefer PyMuPDF for image extraction + bbox if available.
+    try:
+        import fitz  # type: ignore
+
+        doc = fitz.open(path)
+        assets: list[AssetRef] = []
+        for page_index in range(doc.page_count):
+            page = doc.load_page(page_index)
+            images = page.get_images(full=True) or []
+            order = 0
+            for img in images:
+                xref = int(img[0])
+                order += 1
+                rects: list[Any] = []
+                if hasattr(page, "get_image_rects"):
+                    try:
+                        rects = page.get_image_rects(xref)
+                    except Exception:
+                        rects = []
+                if not rects:
+                    try:
+                        rects = [page.get_image_bbox(xref)]
+                    except Exception:
+                        rects = []
+                if not rects:
+                    rects = [None]
+
+                for ridx, rect in enumerate(rects):
+                    anchor: dict[str, Any] = {"page": page_index + 1, "order": order, "xref": xref}
+                    if rect is not None:
+                        anchor["bbox"] = [rect.x0, rect.y0, rect.x1, rect.y1]
+                    origin_ref = f"pdf_xref:{xref}"
+                    ref_id = _hash(f"{origin_ref}|p:{page_index+1}|o:{order}|r:{ridx}|{anchor.get('bbox')}")
+                    assets.append(
+                        AssetRef(
+                            ref_id=ref_id,
+                            source_type="pdf",
+                            origin_ref=origin_ref,
+                            anchor=anchor,
+                            context_hint=None,
+                        )
+                    )
+        doc.close()
+        return assets
+    except Exception:
+        warnings.append("pymupdf_image_fallback")
+
     decoded = raw.decode("latin1", errors="ignore")
     assets: list[AssetRef] = []
     page_refs: list[set[int]] = []

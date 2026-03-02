@@ -22,30 +22,40 @@ class FsAssetNormalizer:
 
         raw = Path(raw_path)
         raw_bytes: bytes | None = None
+        fitz_doc = None
 
-        for asset in assets:
-            try:
-                if asset.origin_ref.startswith("asset://"):
-                    asset_id = asset.origin_ref.replace("asset://", "", 1)
+        try:
+            for asset in assets:
+                try:
+                    if asset.origin_ref.startswith("asset://"):
+                        asset_id = asset.origin_ref.replace("asset://", "", 1)
+                        ref_to_asset_id[asset.ref_id] = asset_id
+                        assets_reused += 1
+                        continue
+
+                    if asset.source_type == "pdf" and raw_bytes is None:
+                        raw_bytes = raw.read_bytes()
+                    if asset.source_type == "pdf" and fitz_doc is None and _has_fitz():
+                        fitz_doc = _open_fitz(raw)
+
+                    data, suffix = _load_asset_bytes(asset, raw, raw_bytes, fitz_doc=fitz_doc)
+                    if data is None:
+                        assets_failed += 1
+                        continue
+                    asset_id, _, reused = self.asset_store.write_bytes(data, suffix)
                     ref_to_asset_id[asset.ref_id] = asset_id
-                    assets_reused += 1
-                    continue
-
-                if asset.source_type == "pdf" and raw_bytes is None:
-                    raw_bytes = raw.read_bytes()
-
-                data, suffix = _load_asset_bytes(asset, raw, raw_bytes)
-                if data is None:
+                    if reused:
+                        assets_reused += 1
+                    else:
+                        assets_new += 1
+                except Exception:
                     assets_failed += 1
-                    continue
-                asset_id, _, reused = self.asset_store.write_bytes(data, suffix)
-                ref_to_asset_id[asset.ref_id] = asset_id
-                if reused:
-                    assets_reused += 1
-                else:
-                    assets_new += 1
-            except Exception:
-                assets_failed += 1
+        finally:
+            if fitz_doc is not None:
+                try:
+                    fitz_doc.close()
+                except Exception:
+                    pass
 
         return NormalizedAssets(
             ref_to_asset_id=ref_to_asset_id,
@@ -55,10 +65,21 @@ class FsAssetNormalizer:
         )
 
 
-def _load_asset_bytes(asset: AssetRef, raw_path: Path, raw_bytes: bytes | None) -> tuple[bytes | None, str | None]:
+def _load_asset_bytes(
+    asset: AssetRef,
+    raw_path: Path,
+    raw_bytes: bytes | None,
+    *,
+    fitz_doc: object | None = None,
+) -> tuple[bytes | None, str | None]:
     if asset.source_type == "markdown":
         return _load_md_asset(asset.origin_ref, raw_path)
     if asset.source_type == "pdf":
+        if asset.origin_ref.startswith("pdf_xref:") and fitz_doc is not None:
+            xref = _parse_pdf_xref(asset.origin_ref)
+            if xref is None:
+                return None, None
+            return _extract_pdf_image_by_xref(fitz_doc, xref)
         if raw_bytes is None:
             return None, None
         obj = _parse_pdf_obj(asset.origin_ref)
@@ -101,6 +122,43 @@ def _parse_pdf_obj(origin_ref: str) -> int | None:
         return int(origin_ref.split(":", 1)[1])
     except Exception:
         return None
+
+
+def _parse_pdf_xref(origin_ref: str) -> int | None:
+    if not origin_ref.startswith("pdf_xref:"):
+        return None
+    try:
+        return int(origin_ref.split(":", 1)[1])
+    except Exception:
+        return None
+
+
+def _has_fitz() -> bool:
+    try:
+        import fitz  # type: ignore  # noqa: F401
+
+        return True
+    except Exception:
+        return False
+
+
+def _open_fitz(path: Path):
+    import fitz  # type: ignore
+
+    return fitz.open(path)
+
+
+def _extract_pdf_image_by_xref(fitz_doc: object, xref: int) -> tuple[bytes | None, str | None]:
+    try:
+        # fitz.Document.extract_image
+        info = fitz_doc.extract_image(xref)  # type: ignore[attr-defined]
+        data = info.get("image")
+        ext = info.get("ext") or "bin"
+        if data is None:
+            return None, None
+        return data, f".{ext}"
+    except Exception:
+        return None, None
 
 
 def _extract_pdf_stream(raw: bytes, obj_num: int) -> bytes | None:
