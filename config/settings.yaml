@@ -17,3 +17,6 @@ server:
 
 defaults:
   strategy_config_id: local.default
+
+eval:
+  datasets_dir: tests/datasets

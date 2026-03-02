@@ -205,8 +205,11 @@ def post_run_eval(_: Request, payload: dict[str, Any] | None = None) -> dict[str
 
 
 @router.get("/eval/runs")
-def list_eval_runs(_: Request, limit: int = 50, offset: int = 0) -> dict[str, Any]:
-    return {"items": [], "limit": limit, "offset": offset}
+def list_eval_runs(request: Request, limit: int = 50, offset: int = 0) -> dict[str, Any]:
+    settings = get_settings(request)
+    sqlite = get_sqlite_store(settings)
+    items = sqlite.list_eval_runs(limit=limit, offset=offset)
+    return {"items": items, "limit": limit, "offset": offset}
 
 
 @router.get("/eval/trends")

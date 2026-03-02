@@ -7,6 +7,7 @@ import pytest
 
 from src.core.runners.eval import EvalRunner
 from src.core.runners.ingest import IngestRunner
+from src.ingestion.stages.storage.sqlite import SqliteStore
 
 
 def _write_settings_yaml(p: Path, *, data_dir: Path) -> None:
@@ -59,3 +60,12 @@ def test_eval_runner_smoke(tmp_path: Path, tmp_workdir: Path) -> None:
     assert result.dataset_id == "rag_eval_small"
     assert result.cases
     assert "retrieval.hit_rate@5" in result.metrics
+
+    # Eval runs persisted
+    sqlite = SqliteStore(db_path=data_dir / "sqlite" / "app.sqlite")
+    # _connect is internal; use it only for test inspection.
+    with sqlite._connect() as conn:  # type: ignore[attr-defined]
+        row = conn.execute("SELECT COUNT(*) AS c FROM eval_runs").fetchone()
+        assert row is not None and int(row["c"]) >= 1
+        row2 = conn.execute("SELECT COUNT(*) AS c FROM eval_case_results").fetchone()
+        assert row2 is not None and int(row2["c"]) >= 1

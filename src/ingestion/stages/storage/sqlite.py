@@ -108,6 +108,31 @@ class SqliteStore:
                 """
             )
 
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS eval_runs (
+                    run_id TEXT PRIMARY KEY,
+                    dataset_id TEXT,
+                    strategy_config_id TEXT,
+                    metrics_json TEXT,
+                    created_at REAL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS eval_case_results (
+                    run_id TEXT,
+                    case_id TEXT,
+                    trace_id TEXT,
+                    metrics_json TEXT,
+                    artifacts_json TEXT,
+                    created_at REAL,
+                    PRIMARY KEY(run_id, case_id)
+                )
+                """
+            )
+
     def find_version_by_file_hash(self, file_sha256: str) -> tuple[str, str] | None:
         with self._connect() as conn:
             row = conn.execute(
@@ -341,6 +366,92 @@ class SqliteStore:
                 "INSERT OR IGNORE INTO chunk_assets(chunk_id, asset_id) VALUES(?, ?)",
                 (chunk_id, asset_id),
             )
+
+    def upsert_eval_run(
+        self,
+        *,
+        run_id: str,
+        dataset_id: str,
+        strategy_config_id: str,
+        metrics_json: str,
+    ) -> None:
+        ts = time.time()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO eval_runs(run_id, dataset_id, strategy_config_id, metrics_json, created_at)
+                VALUES(?, ?, ?, ?, ?)
+                """,
+                (run_id, dataset_id, strategy_config_id, metrics_json, ts),
+            )
+
+    def upsert_eval_case_result(
+        self,
+        *,
+        run_id: str,
+        case_id: str,
+        trace_id: str,
+        metrics_json: str,
+        artifacts_json: str,
+    ) -> None:
+        ts = time.time()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO eval_case_results(run_id, case_id, trace_id, metrics_json, artifacts_json, created_at)
+                VALUES(?, ?, ?, ?, ?, ?)
+                """,
+                (run_id, case_id, trace_id, metrics_json, artifacts_json, ts),
+            )
+
+    def list_eval_runs(self, *, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
+        if limit <= 0:
+            return []
+        if offset < 0:
+            offset = 0
+        sql = """
+            SELECT run_id, dataset_id, strategy_config_id, metrics_json, created_at
+            FROM eval_runs
+            ORDER BY created_at DESC
+            LIMIT ? OFFSET ?
+        """
+        with self._connect() as conn:
+            rows = conn.execute(sql, (limit, offset)).fetchall()
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            out.append(
+                {
+                    "run_id": str(r["run_id"]),
+                    "dataset_id": str(r["dataset_id"]),
+                    "strategy_config_id": str(r["strategy_config_id"]),
+                    "metrics_json": str(r["metrics_json"] or "{}"),
+                    "created_at": float(r["created_at"] or 0.0),
+                }
+            )
+        return out
+
+    def list_eval_case_results(self, *, run_id: str) -> list[dict[str, Any]]:
+        sql = """
+            SELECT run_id, case_id, trace_id, metrics_json, artifacts_json, created_at
+            FROM eval_case_results
+            WHERE run_id=?
+            ORDER BY case_id ASC
+        """
+        with self._connect() as conn:
+            rows = conn.execute(sql, (run_id,)).fetchall()
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            out.append(
+                {
+                    "run_id": str(r["run_id"]),
+                    "case_id": str(r["case_id"]),
+                    "trace_id": str(r["trace_id"] or ""),
+                    "metrics_json": str(r["metrics_json"] or "{}"),
+                    "artifacts_json": str(r["artifacts_json"] or "{}"),
+                    "created_at": float(r["created_at"] or 0.0),
+                }
+            )
+        return out
 
     def fetch_chunks(self, chunk_ids: list[str]) -> list[ChunkRow]:
         if not chunk_ids:

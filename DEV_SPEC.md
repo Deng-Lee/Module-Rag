@@ -5826,7 +5826,7 @@ Tool 契约（List）：`library.list_documents`
 | H-3 | 生成指标 Judge（FakeJudge/LLM Judge） | 完成 | 2026-03-02 | `FakeJudge` + `GenerationMetricSet` + 单测 |
 | H-4 | Evaluator 抽象 + Composite | 完成 | 2026-03-02 | `CompositeEvaluator` + 命名空间合并 + 单测 |
 | H-5 | EvalRunner（回放 QueryRunner，多策略对比） | 完成 | 2026-03-02 | `EvalRunner` + run_output 组装 + 集成测试 |
-| H-6 | Eval 产物落 SQLite + reader | 未完成 |  | `eval_runs/eval_case_results` |
+| H-6 | Eval 产物落 SQLite + reader | 完成 | 2026-03-02 | `eval_runs/eval_case_results` + list API |
 | H-7 | RAGAS/DeepEval 适配器（可选） | 未完成 |  | 缺依赖返回结构化错误 |
 | H-8 | 质量门禁（阈值断言 + 报告） | 未完成 |  | `assert_metrics_ge` + failure report |
 

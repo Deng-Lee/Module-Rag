@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import json
+
 from ..eval import CompositeEvaluator, GenerationMetricSet, MetricSet, load_dataset
 from ..response import ResponseIR
 from ..strategy import load_settings
@@ -42,10 +44,10 @@ class EvalRunner:
         top_k: int = 5,
         judge_strategy_id: str | None = None,
     ) -> EvalRunResult:
-        dataset_path = _resolve_dataset_path(dataset_id)
+        settings = load_settings(self.settings_path)
+        dataset_path = _resolve_dataset_path(dataset_id, settings)
         dataset = load_dataset(dataset_path)
 
-        settings = load_settings(self.settings_path)
         sqlite = SqliteStore(db_path=settings.paths.sqlite_dir / "app.sqlite")
 
         evaluator = CompositeEvaluator(
@@ -79,24 +81,34 @@ class EvalRunner:
                 aggregates.setdefault(k, []).append(float(v))
 
         metrics = {k: (sum(vals) / max(1, len(vals))) for k, vals in aggregates.items()}
-        return EvalRunResult(
+        run_result = EvalRunResult(
             run_id=str(uuid.uuid4()),
             dataset_id=dataset.dataset_id,
             strategy_config_id=strategy_config_id,
             metrics=metrics,
             cases=cases_out,
         )
+        _persist_eval_run(sqlite, run_result)
+        return run_result
 
 
-def _resolve_dataset_path(dataset_id: str) -> Path:
+def _resolve_dataset_path(dataset_id: str, settings: Any) -> Path:
     p = Path(dataset_id)
     if p.exists():
         return p
     repo_root = Path(__file__).resolve().parents[3]
-    candidate = repo_root / "tests" / "datasets" / f"{dataset_id}.yaml"
+    datasets_dir = settings.raw.get("eval", {}).get("datasets_dir")
+    if datasets_dir:
+        base = Path(datasets_dir)
+        if not base.is_absolute():
+            base = (repo_root / base).resolve()
+    else:
+        base = repo_root / "tests" / "datasets"
+
+    candidate = base / f"{dataset_id}.yaml"
     if candidate.exists():
         return candidate
-    candidate_json = repo_root / "tests" / "datasets" / f"{dataset_id}.json"
+    candidate_json = base / f"{dataset_id}.json"
     if candidate_json.exists():
         return candidate_json
     raise FileNotFoundError(f"dataset not found: {dataset_id}")
@@ -126,3 +138,20 @@ def _response_to_run_output(resp: ResponseIR, sqlite: SqliteStore, *, top_k: int
         "answer": resp.content_md,
         "context": context,
     }
+
+
+def _persist_eval_run(sqlite: SqliteStore, result: EvalRunResult) -> None:
+    sqlite.upsert_eval_run(
+        run_id=result.run_id,
+        dataset_id=result.dataset_id,
+        strategy_config_id=result.strategy_config_id,
+        metrics_json=json.dumps(result.metrics, ensure_ascii=False),
+    )
+    for case in result.cases:
+        sqlite.upsert_eval_case_result(
+            run_id=result.run_id,
+            case_id=case.case_id,
+            trace_id=case.trace_id,
+            metrics_json=json.dumps(case.metrics, ensure_ascii=False),
+            artifacts_json=json.dumps(case.artifacts, ensure_ascii=False),
+        )
