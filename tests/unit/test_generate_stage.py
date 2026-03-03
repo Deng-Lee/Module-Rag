@@ -32,7 +32,7 @@ def _rt(llm) -> QueryRuntime:
 
 
 def test_generate_stage_uses_llm_when_available() -> None:
-    q = QueryIR(query_raw="q", query_norm="what is rag")
+    q = QueryIR(query_raw="q", query_norm="what is rag", query_hash="h")
     bundle = ContextBundle(
         chunks=[
             ContextChunk(
@@ -59,7 +59,7 @@ def test_generate_stage_uses_llm_when_available() -> None:
 
 
 def test_generate_stage_falls_back_on_llm_failure() -> None:
-    q = QueryIR(query_raw="q", query_norm="what is rag")
+    q = QueryIR(query_raw="q", query_norm="what is rag", query_hash="h")
     bundle = ContextBundle(
         chunks=[
             ContextChunk(

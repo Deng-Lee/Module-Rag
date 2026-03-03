@@ -29,7 +29,7 @@ def _normalize_trace(rec: dict) -> dict:
 
 def _make_trace() -> dict:
     ctx = TraceContext.new("trace_golden_query", trace_type="query", strategy_config_id="local.default")
-    ctx.providers_snapshot = {"embedder": {"provider_id": "embedder.fake"}}
+    ctx.providers_snapshot = {"embedder": {"provider_id": "fake"}}
     with TraceContext.activate(ctx):
         with obs.with_stage("query_norm"):
             obs.event("query.normalized", {"query_hash": "h", "rewrite_used": False})

@@ -8,8 +8,9 @@ from .chunking.chunker import ChunkerStage
 from .embedding import DenseEncoded, EncodedChunks, EncodingStrategy, EmbeddingStage, SparseDoc, SparseEncoded
 from .transform.asset_normalize import FsAssetNormalizer
 from .transform.transform_pre import DefaultTransformPre, TransformPreStage
-from .transform.transform_post import NoopEnricher, TransformPostStage
+from .transform.transform_post import TransformPostStage
 from .transform.retrieval_view import RetrievalViewConfig, build_chunk_retrieval_text
+from ...libs.providers.enricher.noop import NoopEnricher
 from .storage.fs import FsStore
 from .storage.assets import AssetStore
 from .storage.sqlite import SqliteStore

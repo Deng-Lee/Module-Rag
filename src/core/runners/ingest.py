@@ -18,11 +18,12 @@ from ...ingestion.stages.storage.sqlite import SqliteStore
 from ...ingestion.stages.storage.upsert import UpsertResult, UpsertStage
 from ...ingestion.stages.transform.asset_normalize import FsAssetNormalizer
 from ...ingestion.stages.transform.transform_post import TransformPostStage
+from ...ingestion.stages.transform.retrieval_view import RetrievalViewConfig
 from ...ingestion.stages.transform.transform_pre import DefaultTransformPre, TransformPreStage
 from ...libs.providers import register_builtin_providers
 from ...libs.registry import ProviderRegistry
 from ..response import ResponseIR
-from ..strategy import StrategyLoader, load_settings
+from ..strategy import StrategyLoader, load_settings, merge_provider_overrides
 
 
 @dataclass
@@ -110,7 +111,14 @@ def _build_ingestion_pipeline(strategy_config_id: str, *, settings_path: Path) -
     assets_dir = settings.paths.assets_dir
     assets_store = AssetStore(assets_dir=assets_dir)
 
-    # Providers (config-driven)
+    # Providers (config-driven; allow settings-level overrides)
+    merged_providers = merge_provider_overrides(
+        strategy.providers,
+        settings.raw.get("providers"),
+        settings.raw.get("model_endpoints"),
+    )
+    strategy.providers = merged_providers
+
     loader_provider_id, loader_params = strategy.resolve_provider("loader")
     sectioner_provider_id, sectioner_params = strategy.resolve_provider("sectioner")
     chunker_provider_id, chunker_params = strategy.resolve_provider("chunker")
@@ -141,6 +149,8 @@ def _build_ingestion_pipeline(strategy_config_id: str, *, settings_path: Path) -
     vec_kwargs = dict(vector_params or {})
     if vector_provider_id == "vector.chroma_lite" and "db_path" not in vec_kwargs:
         vec_kwargs["db_path"] = str(settings.paths.chroma_dir / "chroma_lite.sqlite")
+    if vector_provider_id == "vector.chroma" and "persist_dir" not in vec_kwargs:
+        vec_kwargs["persist_dir"] = str(settings.paths.chroma_dir / "chroma")
     vector_index = registry.create("vector_index", vector_provider_id, **vec_kwargs)
 
     # Stages
@@ -149,7 +159,33 @@ def _build_ingestion_pipeline(strategy_config_id: str, *, settings_path: Path) -
     transform_pre = TransformPreStage(transformer=DefaultTransformPre(profile_id="default"))
     sectioner = SectionerStage(sectioner=sectioner_impl)
     chunker = ChunkerStage(chunker=chunker_impl, text_norm_profile_id=text_norm_profile_id)
-    transform_post = TransformPostStage()
+    # Transform post: retrieval view + optional multimodal enrichers (OCR/Caption).
+    view_cfg = RetrievalViewConfig()
+    try:
+        _, tp_params = strategy.resolve_provider("transform_post")
+        if isinstance(tp_params, dict):
+            template_id = tp_params.get("template_id", view_cfg.template_id)
+            include_heading_text = tp_params.get("include_heading_text", view_cfg.include_heading_text)
+            if isinstance(template_id, str) and template_id:
+                view_cfg = RetrievalViewConfig(
+                    template_id=template_id,
+                    include_heading_text=bool(include_heading_text),
+                )
+    except Exception:
+        pass
+
+    enrichers = []
+    try:
+        enricher_id, enricher_params = strategy.resolve_provider("enricher")
+        if isinstance(enricher_id, str) and enricher_id and enricher_id != "noop":
+            params = dict(enricher_params or {})
+            # Provide assets_dir for filesystem-based asset fetch.
+            params.setdefault("assets_dir", str(settings.paths.assets_dir))
+            enrichers.append(registry.create("enricher", enricher_id, **params))
+    except Exception:
+        pass
+
+    transform_post = TransformPostStage(view_cfg=view_cfg, enrichers=enrichers or None)
     embedding = EmbeddingStage(
         embedder=embedder,
         embedder_id=embedder_provider_id,

@@ -6,7 +6,7 @@ from typing import Any, Callable
 
 from ..query_engine import QueryParams, QueryPipeline, QueryRuntime
 from ..response import ResponseIR
-from ..strategy import StrategyLoader, load_settings
+from ..strategy import StrategyLoader, load_settings, merge_provider_overrides
 from ...ingestion.stages.storage.sqlite import SqliteStore
 from ...libs.factories import make_embedding, make_llm
 from ...libs.providers import register_builtin_providers
@@ -55,6 +55,12 @@ def _build_query_runtime(strategy_config_id: str, *, settings_path: str | Path) 
     registry = ProviderRegistry()
     register_builtin_providers(registry)
 
+    merged_providers = merge_provider_overrides(
+        strategy.providers,
+        settings.raw.get("providers"),
+        settings.raw.get("model_endpoints"),
+    )
+    strategy.providers = merged_providers
     cfg = strategy.to_factory_cfg()
     embedder, _ = make_embedding(cfg, registry)
     llm = make_llm(cfg, registry)
@@ -64,6 +70,8 @@ def _build_query_runtime(strategy_config_id: str, *, settings_path: str | Path) 
     # Keep vector store location aligned to settings paths (important for local tests and MCP tools).
     if vec_provider_id == "vector.chroma_lite" and "db_path" not in vec_kwargs:
         vec_kwargs["db_path"] = str(settings.paths.chroma_dir / "chroma_lite.sqlite")
+    if vec_provider_id == "vector.chroma" and "persist_dir" not in vec_kwargs:
+        vec_kwargs["persist_dir"] = str(settings.paths.chroma_dir / "chroma")
     vector_index = registry.create("vector_index", vec_provider_id, **vec_kwargs)
 
     # Dense retriever: injected with embedder + vector_index.

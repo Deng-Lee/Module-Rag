@@ -30,8 +30,11 @@ def make_tool(*, cfg: DeleteDocumentToolConfig | None = None) -> FunctionTool:
             raise JsonRpcAppError(INVALID_PARAMS, "invalid param: version_id must be non-empty string")
 
         mode = args.get("mode", "soft")
+        # Client-compat: some clients auto-fill `mode: "default"`. Treat it as "soft".
+        if mode == "default":
+            mode = "soft"
         if not isinstance(mode, str) or mode not in {"soft", "hard"}:
-            raise JsonRpcAppError(INVALID_PARAMS, "invalid param: mode must be soft|hard")
+            raise JsonRpcAppError(INVALID_PARAMS, "invalid param: mode must be soft|hard (or 'default')")
         if mode != "soft":
             raise JsonRpcAppError(INVALID_PARAMS, "hard delete is not enabled in E-9")
 
@@ -85,7 +88,7 @@ def make_tool(*, cfg: DeleteDocumentToolConfig | None = None) -> FunctionTool:
 
     return FunctionTool(
         spec=ToolSpec(
-            name="library.delete_document",
+            name="library_delete_document",
             description="Soft delete a document (or a specific version).",
             input_schema={
                 "type": "object",

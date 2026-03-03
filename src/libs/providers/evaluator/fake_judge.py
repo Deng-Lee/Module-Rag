@@ -11,7 +11,7 @@ class FakeJudge:
     Uses token overlap to approximate faithfulness/relevancy.
     """
 
-    provider_id = "judge.fake"
+    provider_id = "fake"
 
     def score_faithfulness(self, answer: str, context: str) -> JudgeScore:
         score = _overlap_ratio(_tokens(answer), _tokens(context))

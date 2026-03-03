@@ -15,13 +15,6 @@ class Enricher(Protocol):
 
 
 @dataclass
-class NoopEnricher(Enricher):
-    def enrich(self, chunk: ChunkIR) -> dict[str, Any]:  # pragma: no cover
-        _ = chunk
-        return {}
-
-
-@dataclass
 class TransformPostStage:
     view_cfg: RetrievalViewConfig = RetrievalViewConfig()
     enrichers: list[Enricher] | None = None

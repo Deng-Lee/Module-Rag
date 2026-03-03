@@ -78,7 +78,7 @@ def _ingest_docs(
     transform_post = TransformPostStage()
 
     embedder = BowHashEmbedder(dim=64)
-    embedding = EmbeddingStage(embedder=embedder, embedder_id="embedder.bow", embedder_version="0")
+    embedding = EmbeddingStage(embedder=embedder, embedder_id="bow", embedder_version="0")
 
     upsert = UpsertStage(
         fs=fs,
@@ -268,4 +268,3 @@ def test_retrieval_regression_metrics_across_strategies(tmp_path: Path, tmp_work
 
     # Regression-friendly guard: hybrid_rrf should not be worse than hybrid_passthrough on this tiny dataset.
     assert metrics["hybrid_rrf"]["hit@5"] >= metrics["hybrid_passthrough"]["hit@5"]
-

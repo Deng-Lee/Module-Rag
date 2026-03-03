@@ -71,7 +71,7 @@ def test_query_runner_on_ingested_db_returns_sources(tmp_path: Path, tmp_workdir
     chunks = TransformPostStage().run(chunks)
 
     embedder = FakeEmbedder(dim=8)
-    encoded = EmbeddingStage(embedder=embedder, embedder_id="embedder.fake", embedder_version="0").run(
+    encoded = EmbeddingStage(embedder=embedder, embedder_id="fake", embedder_version="0").run(
         chunks, EncodingStrategy(mode="dense")
     )
     assert encoded.dense is not None

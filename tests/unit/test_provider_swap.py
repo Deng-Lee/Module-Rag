@@ -4,7 +4,7 @@ from src.core.strategy import build_runtime_from_strategy
 
 
 def test_provider_swap_changes_output() -> None:
-    rt_a = build_runtime_from_strategy("local.default")
+    rt_a = build_runtime_from_strategy("local.test")
     rt_b = build_runtime_from_strategy("local.alt")
 
     a_provider, _ = rt_a.strategy.resolve_provider("embedder")

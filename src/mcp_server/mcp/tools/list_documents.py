@@ -75,7 +75,7 @@ def make_tool(*, cfg: ListDocumentsToolConfig | None = None) -> FunctionTool:
 
     return FunctionTool(
         spec=ToolSpec(
-            name="library.list_documents",
+            name="library_list_documents",
             description="List document versions (admin).",
             input_schema={
                 "type": "object",
@@ -90,4 +90,3 @@ def make_tool(*, cfg: ListDocumentsToolConfig | None = None) -> FunctionTool:
         ),
         fn=_handler,
     )
-

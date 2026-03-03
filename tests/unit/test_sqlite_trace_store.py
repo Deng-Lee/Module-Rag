@@ -11,7 +11,7 @@ from src.observability.trace.context import TraceContext
 def _make_env(trace_id: str, db_path: Path) -> str:
     sink = SqliteTraceSink(db_path)
     ctx = TraceContext.new(trace_id, trace_type="query", strategy_config_id="scfg_test")
-    ctx.providers_snapshot = {"embedder": {"provider_id": "embedder.fake"}}
+    ctx.providers_snapshot = {"embedder": {"provider_id": "fake"}}
     with TraceContext.activate(ctx):
         with obs.with_stage("retrieve_dense"):
             obs.event("retrieval.candidates", {"source": "dense", "count": 2})
@@ -34,5 +34,5 @@ def test_sqlite_trace_sink_and_reader(tmp_path: Path) -> None:
     env = reader.get_trace("t-sql-1")
     assert env is not None
     assert env.trace_id == "t-sql-1"
-    assert env.providers.get("embedder", {}).get("provider_id") == "embedder.fake"
+    assert env.providers.get("embedder", {}).get("provider_id") == "fake"
     assert env.aggregates["counters"]["retrieval.candidates.dense"] == 2

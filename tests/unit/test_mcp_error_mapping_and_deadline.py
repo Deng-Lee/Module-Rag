@@ -47,7 +47,6 @@ def test_protocol_deadline_exceeded_is_structured_error(mock_clock: float) -> No
 
     s = McpSession.new("L1").with_deadline(0)
     with pytest.raises(JsonRpcAppError) as ei:
-        proto.handle_tools_call(s, name="library.ping", args={"message": "hi"})
+        proto.handle_tools_call(s, name="library_ping", args={"message": "hi"})
     assert ei.value.code == DEADLINE_EXCEEDED
     assert isinstance(ei.value.data, dict) and "trace_id" in ei.value.data
-

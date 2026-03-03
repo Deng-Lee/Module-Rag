@@ -24,7 +24,7 @@ def _write_settings_yaml(p: Path, *, data_dir: Path) -> None:
             "  logs_dir: logs",
             "",
             "defaults:",
-            "  strategy_config_id: local.default",
+            "  strategy_config_id: local.test",
             "",
         ]
     )
@@ -64,7 +64,7 @@ def test_mcp_library_ingest_over_stdio_persists_stores(tmp_path: Path, tmp_workd
                 "jsonrpc": "2.0",
                 "id": 1,
                 "method": "tools/call",
-                "params": {"name": "library.ingest", "arguments": {"file_path": str(md_path)}},
+                "params": {"name": "library_ingest", "arguments": {"file_path": str(md_path)}},
             },
             ensure_ascii=False,
         )

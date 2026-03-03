@@ -16,12 +16,13 @@ def _handler(session: McpSession, args: dict[str, Any]) -> dict[str, Any]:
 
 tool = FunctionTool(
     spec=ToolSpec(
-        name="library.ping",
+        name="library_ping",
         description="Health check / smoke tool for MCP transport.",
         input_schema={
             "type": "object",
             "properties": {"message": {"type": "string"}},
-            "additionalProperties": False,
+            # Be permissive: some clients/models may attach extra fields when bridging tool calls.
+            "additionalProperties": True,
         },
     ),
     fn=_handler,

@@ -89,7 +89,7 @@ def test_upsert_closed_loop_writes_fs_sqlite_chroma_and_fts5(
 
     chunks = TransformPostStage().run(chunks)
 
-    encoded = EmbeddingStage(embedder=FakeEmbedder(dim=8), embedder_id="embedder.fake", embedder_version="0").run(
+    encoded = EmbeddingStage(embedder=FakeEmbedder(dim=8), embedder_id="fake", embedder_version="0").run(
         chunks, EncodingStrategy(mode="hybrid")
     )
     assert encoded.dense is not None

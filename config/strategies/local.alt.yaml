@@ -13,11 +13,11 @@ providers:
       chunk_overlap: 120
       separators: ["\n\n", "\n", " ", ""]
   embedder:
-    provider_id: embedder.fake_alt
+    provider_id: fake_alt
     params:
       dim: 12
   llm:
-    provider_id: llm.fake
+    provider_id: fake
     params:
       name: fake-llm-alt
   vector_index:
@@ -33,4 +33,11 @@ providers:
     params:
       k: 60
   reranker:
-    provider_id: reranker.noop
+    provider_id: noop
+  enricher:
+    provider_id: noop
+  transform_post:
+    provider_id: default
+    params:
+      template_id: facts_only
+      include_heading_text: false

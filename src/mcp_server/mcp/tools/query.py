@@ -35,7 +35,8 @@ def normalize_query_input(
         raise JsonRpcAppError(INVALID_PARAMS, "invalid param: filters must be an object")
 
     strategy_config_id = args.get("strategy_config_id")
-    if strategy_config_id is None:
+    # Client-compat: some clients auto-fill `strategy_config_id: "default"`.
+    if strategy_config_id in (None, "default", ""):
         settings = load_settings(cfg.settings_path)
         strategy_config_id = settings.defaults.strategy_config_id
     if not isinstance(strategy_config_id, str) or not strategy_config_id:
@@ -59,7 +60,7 @@ def make_tool(*, runner: QueryRunner, cfg: QueryToolConfig | None = None) -> Fun
 
     return FunctionTool(
         spec=ToolSpec(
-            name="library.query",
+            name="library_query",
             description="Query the library and return answer markdown + citations (no base64 assets).",
             input_schema={
                 "type": "object",
@@ -75,4 +76,3 @@ def make_tool(*, runner: QueryRunner, cfg: QueryToolConfig | None = None) -> Fun
         ),
         fn=_handler,
     )
-

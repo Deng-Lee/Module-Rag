@@ -24,7 +24,7 @@ def _write_settings_yaml(p: Path, *, data_dir: Path) -> None:
             "  logs_dir: logs",
             "",
             "defaults:",
-            "  strategy_config_id: local.default",
+            "  strategy_config_id: local.test",
             "",
         ]
     )
@@ -64,7 +64,7 @@ def test_mcp_library_query_after_ingest_over_stdio(tmp_path: Path, tmp_workdir: 
                 "jsonrpc": "2.0",
                 "id": 1,
                 "method": "tools/call",
-                "params": {"name": "library.ingest", "arguments": {"file_path": str(md_path)}},
+                "params": {"name": "library_ingest", "arguments": {"file_path": str(md_path)}},
             },
             ensure_ascii=False,
         )
@@ -76,7 +76,7 @@ def test_mcp_library_query_after_ingest_over_stdio(tmp_path: Path, tmp_workdir: 
                 "jsonrpc": "2.0",
                 "id": 2,
                 "method": "tools/call",
-                "params": {"name": "library.query", "arguments": {"query": "hello world", "top_k": 3}},
+                "params": {"name": "library_query", "arguments": {"query": "hello world", "top_k": 3}},
             },
             ensure_ascii=False,
         )

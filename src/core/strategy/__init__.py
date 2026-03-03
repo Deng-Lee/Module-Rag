@@ -1,5 +1,5 @@
 """Strategy/config loading and validation."""
-from .loader import StrategyLoader, load_settings
+from .loader import StrategyLoader, load_settings, merge_provider_overrides
 from .models import Settings, StrategyConfig
 from .runtime import Runtime, build_runtime_from_strategy
 
@@ -8,6 +8,7 @@ __all__ = [
     "StrategyConfig",
     "StrategyLoader",
     "load_settings",
+    "merge_provider_overrides",
     "Runtime",
     "build_runtime_from_strategy",
 ]

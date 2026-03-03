@@ -30,12 +30,12 @@ def _cfg() -> dict:
             "loader": {"provider_id": "loader.fake"},
             "sectioner": {"provider_id": "sectioner.fake"},
             "chunker": {"provider_id": "chunker.fake"},
-            "embedder": {"provider_id": "embedder.fake"},
+            "embedder": {"provider_id": "fake"},
             "vector_index": {"provider_id": "vector.fake"},
             "retriever": {"provider_id": "retriever.fake"},
             "fusion": {"provider_id": "fusion.fake"},
-            "llm": {"provider_id": "llm.fake"},
-            "evaluator": {"provider_id": "evaluator.fake"},
+            "llm": {"provider_id": "fake"},
+            "evaluator": {"provider_id": "fake"},
         }
     }
 
@@ -46,12 +46,12 @@ def test_factories_create_instances() -> None:
         ("loader", "loader.fake"),
         ("sectioner", "sectioner.fake"),
         ("chunker", "chunker.fake"),
-        ("embedder", "embedder.fake"),
+        ("embedder", "fake"),
         ("vector_index", "vector.fake"),
         ("retriever", "retriever.fake"),
         ("fusion", "fusion.fake"),
-        ("llm", "llm.fake"),
-        ("evaluator", "evaluator.fake"),
+        ("llm", "fake"),
+        ("evaluator", "fake"),
     ]:
         _reg(reg, kind, pid)
 
@@ -88,7 +88,6 @@ def test_missing_provider_config_errors() -> None:
 
 def test_missing_provider_registration_errors() -> None:
     reg = ProviderRegistry()
-    cfg = {"providers": {"llm": {"provider_id": "llm.missing"}}}
+    cfg = {"providers": {"llm": {"provider_id": "missing"}}}
     with pytest.raises(ProviderNotFoundError):
         make_llm(cfg, reg)
-

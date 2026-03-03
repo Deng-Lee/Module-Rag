@@ -23,7 +23,7 @@ def _write_settings_yaml(p: Path, *, data_dir: Path) -> None:
             "  logs_dir: logs",
             "",
             "defaults:",
-            "  strategy_config_id: local.default",
+            "  strategy_config_id: local.test",
             "",
         ]
     )
@@ -64,7 +64,7 @@ def test_mcp_list_delete_affects_query_soft_delete(tmp_path: Path, tmp_workdir: 
                 "jsonrpc": "2.0",
                 "id": 1,
                 "method": "tools/call",
-                "params": {"name": "library.ingest", "arguments": {"file_path": str(md_path)}},
+                "params": {"name": "library_ingest", "arguments": {"file_path": str(md_path)}},
             },
             ensure_ascii=False,
         )
@@ -73,7 +73,7 @@ def test_mcp_list_delete_affects_query_soft_delete(tmp_path: Path, tmp_workdir: 
     # 2) list_documents should include the version (not deleted)
     p.stdin.write(
         json.dumps(
-            {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "library.list_documents", "arguments": {}}},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "library_list_documents", "arguments": {}}},
             ensure_ascii=False,
         )
         + "\n"
@@ -96,7 +96,7 @@ def test_mcp_list_delete_affects_query_soft_delete(tmp_path: Path, tmp_workdir: 
                 "jsonrpc": "2.0",
                 "id": 3,
                 "method": "tools/call",
-                "params": {"name": "library.delete_document", "arguments": {"doc_id": doc_id, "version_id": version_id}},
+                "params": {"name": "library_delete_document", "arguments": {"doc_id": doc_id, "version_id": version_id}},
             },
             ensure_ascii=False,
         )
@@ -109,7 +109,7 @@ def test_mcp_list_delete_affects_query_soft_delete(tmp_path: Path, tmp_workdir: 
                 "jsonrpc": "2.0",
                 "id": 4,
                 "method": "tools/call",
-                "params": {"name": "library.query", "arguments": {"query": "hello world", "top_k": 3}},
+                "params": {"name": "library_query", "arguments": {"query": "hello world", "top_k": 3}},
             },
             ensure_ascii=False,
         )
@@ -118,7 +118,7 @@ def test_mcp_list_delete_affects_query_soft_delete(tmp_path: Path, tmp_workdir: 
     # 5) list_documents default should exclude deleted
     p.stdin.write(
         json.dumps(
-            {"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "library.list_documents", "arguments": {}}},
+            {"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "library_list_documents", "arguments": {}}},
             ensure_ascii=False,
         )
         + "\n"
@@ -130,7 +130,7 @@ def test_mcp_list_delete_affects_query_soft_delete(tmp_path: Path, tmp_workdir: 
                 "jsonrpc": "2.0",
                 "id": 6,
                 "method": "tools/call",
-                "params": {"name": "library.list_documents", "arguments": {"include_deleted": True}},
+                "params": {"name": "library_list_documents", "arguments": {"include_deleted": True}},
             },
             ensure_ascii=False,
         )
@@ -158,4 +158,3 @@ def test_mcp_list_delete_affects_query_soft_delete(tmp_path: Path, tmp_workdir: 
     assert any(it["version_id"] == version_id and it["status"] == "deleted" for it in items6)
 
     p.terminate()
-

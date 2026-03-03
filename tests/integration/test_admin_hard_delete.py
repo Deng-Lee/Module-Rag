@@ -59,7 +59,7 @@ def test_admin_hard_delete_removes_storage_rows(tmp_path: Path, tmp_workdir: Pat
                 "  logs_dir: logs",
                 "",
                 "defaults:",
-                "  strategy_config_id: local.default",
+                "  strategy_config_id: local.test",
                 "",
             ]
         ),
@@ -92,7 +92,7 @@ def test_admin_hard_delete_removes_storage_rows(tmp_path: Path, tmp_workdir: Pat
     chunks = TransformPostStage().run(chunks)
 
     embedder = FakeEmbedder(dim=8)
-    encoded = EmbeddingStage(embedder=embedder, embedder_id="embedder.fake", embedder_version="0").run(
+    encoded = EmbeddingStage(embedder=embedder, embedder_id="fake", embedder_version="0").run(
         chunks, EncodingStrategy(mode="hybrid")
     )
 

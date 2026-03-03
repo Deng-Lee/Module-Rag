@@ -107,6 +107,58 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
     return out
 
 
+def _apply_model_endpoints(providers: dict[str, Any], endpoints: dict[str, Any]) -> dict[str, Any]:
+    if not endpoints:
+        return providers
+    out: dict[str, Any] = dict(providers)
+    for kind, value in list(out.items()):
+        if not isinstance(value, dict):
+            continue
+        params = value.get("params")
+        if params is None:
+            params = {k: v for k, v in value.items() if k not in {"provider_id", "id"}}
+        if not isinstance(params, dict):
+            continue
+        endpoint_key = params.get("endpoint_key") or params.get("endpoint")
+        if not isinstance(endpoint_key, str) or not endpoint_key:
+            continue
+        # Strip indirection keys early so providers never need to accept them.
+        params.pop("endpoint_key", None)
+        params.pop("endpoint", None)
+
+        ep = endpoints.get(endpoint_key)
+        if not isinstance(ep, dict):
+            value["params"] = params
+            out[kind] = value
+            continue
+        # Fill missing base_url/api_key/deployment_name from endpoints.
+        for key in ("base_url", "api_key", "deployment_name", "api_version"):
+            if key not in params and key in ep:
+                params[key] = ep[key]
+        value["params"] = params
+        out[kind] = value
+    return out
+
+
+def merge_provider_overrides(
+    base: dict[str, Any],
+    override: dict[str, Any] | None,
+    endpoints: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if not override:
+        merged = dict(base)
+    else:
+        merged = dict(base)
+        for kind, value in override.items():
+            if kind in merged and isinstance(merged[kind], dict) and isinstance(value, dict):
+                merged[kind] = _deep_merge(merged[kind], value)
+            else:
+                merged[kind] = value
+    if endpoints:
+        merged = _apply_model_endpoints(merged, endpoints)
+    return merged
+
+
 def load_settings(path: str | Path) -> Settings:
     """
     Load `config/settings.yaml` (workspace-local).
@@ -128,6 +180,17 @@ def load_settings(path: str | Path) -> Settings:
     if ov.exists() and ov.is_file():
         raw_override = _load_yaml_mapping(ov)
         raw = _deep_merge(raw, raw_override)
+
+    # Optional model endpoints file (not committed).
+    endpoints_path = os.environ.get("MODULE_RAG_MODEL_ENDPOINTS_PATH")
+    if endpoints_path:
+        ep = Path(endpoints_path).expanduser()
+    else:
+        ep = (p.parent / "model_endpoints.local.yaml").resolve()
+    if ep.exists() and ep.is_file():
+        raw_endpoints = _load_yaml_mapping(ep)
+        if isinstance(raw_endpoints, dict) and "providers" in raw_endpoints:
+            raw["model_endpoints"] = raw_endpoints.get("providers") or {}
     s = Settings.from_dict(raw)
 
     # normalize paths relative to repo root

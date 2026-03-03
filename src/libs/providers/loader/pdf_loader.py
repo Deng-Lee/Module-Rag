@@ -134,7 +134,11 @@ def _extract_image_refs(raw: bytes, path: Path, warnings: list[str]) -> list[Ass
                         )
                     )
         doc.close()
-        return assets
+        if assets:
+            return assets
+        # If PyMuPDF parsed successfully but found no images (common for minimal/synthetic PDFs),
+        # fall back to object-based scanning so we still produce stable AssetRef entries.
+        warnings.append("pymupdf_no_images_fallback")
     except Exception:
         warnings.append("pymupdf_image_fallback")
 

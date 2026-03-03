@@ -77,7 +77,7 @@ def _build_ingest_pipeline(
     transform_post = TransformPostStage()
     embedding = EmbeddingStage(
         embedder=FakeEmbedder(dim=8),
-        embedder_id="embedder.fake",
+        embedder_id="fake",
         embedder_version="0",
     )
     upsert = UpsertStage(

@@ -8,13 +8,13 @@ from src.core.strategy.models import StrategyConfig
 
 def test_strategy_loader_minimal() -> None:
     loader = StrategyLoader()
-    sc = loader.load("local.default")
+    sc = loader.load("local.test")
 
-    assert sc.strategy_id == "local.default"
+    assert sc.strategy_id == "local.test"
     assert sc.strategy_config_id.startswith("scfg_")
 
     provider_id, params = sc.resolve_provider("embedder")
-    assert provider_id == "embedder.fake"
+    assert provider_id == "fake"
     assert params["dim"] == 8
 
     factory_cfg = sc.to_factory_cfg()
@@ -24,7 +24,7 @@ def test_strategy_loader_minimal() -> None:
 
 def test_strategy_config_missing_kind() -> None:
     loader = StrategyLoader()
-    sc = loader.load("local.default")
+    sc = loader.load("local.test")
     with pytest.raises(KeyError):
         sc.resolve_provider("missing")
 

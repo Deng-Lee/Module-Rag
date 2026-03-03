@@ -54,7 +54,7 @@
   },
   "providers": {
     "embedder": {
-      "provider_id": "embedder.fake"
+      "provider_id": "fake"
     }
   },
   "replay": {

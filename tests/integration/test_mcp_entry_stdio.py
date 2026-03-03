@@ -23,7 +23,7 @@ def _write_settings_yaml(p: Path, *, data_dir: Path, logs_dir: Path) -> None:
             "  cache_dir: cache",
             "",
             "defaults:",
-            "  strategy_config_id: local.default",
+            "  strategy_config_id: local.test",
             "",
         ]
     )
@@ -67,7 +67,7 @@ def test_mcp_entry_stdio_writes_trace_jsonl(tmp_path: Path, tmp_workdir: Path) -
                 "jsonrpc": "2.0",
                 "id": 2,
                 "method": "tools/call",
-                "params": {"name": "library.ingest", "arguments": {"file_path": str(md_path)}},
+                "params": {"name": "library_ingest", "arguments": {"file_path": str(md_path)}},
             },
             ensure_ascii=False,
         )
@@ -79,7 +79,7 @@ def test_mcp_entry_stdio_writes_trace_jsonl(tmp_path: Path, tmp_workdir: Path) -
     out1 = json.loads(p.stdout.readline().strip())
     assert out1["id"] == 1
     names = [t["name"] for t in out1["result"]["tools"]]
-    assert "library.ingest" in names
+    assert "library_ingest" in names
 
     out2 = json.loads(p.stdout.readline().strip())
     assert out2["id"] == 2
@@ -91,4 +91,3 @@ def test_mcp_entry_stdio_writes_trace_jsonl(tmp_path: Path, tmp_workdir: Path) -
     assert trace_path.read_text(encoding="utf-8").strip() != ""
 
     p.terminate()
-

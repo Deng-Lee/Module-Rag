@@ -24,6 +24,6 @@ def test_sparse_retrieve_stage_disabled_returns_empty() -> None:
         reranker=None,
         llm=None,
     )
-    q = QueryIR(query_raw="hi", query_norm="hi")
+    q = QueryIR(query_raw="hi", query_norm="hi", query_hash="h")
     out = SparseRetrieveStage().run(q, rt, QueryParams(top_k=3))
     assert out == []

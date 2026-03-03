@@ -24,7 +24,7 @@ def test_mcp_tools_list_and_call_over_stdio() -> None:
 
     p.stdin.write('{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}\n')
     p.stdin.write(
-        '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"library.ping","arguments":{"message":"hi"}}}\n'
+        '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"library_ping","arguments":{"message":"hi"}}}\n'
     )
     p.stdin.flush()
     p.stdin.close()
@@ -32,7 +32,7 @@ def test_mcp_tools_list_and_call_over_stdio() -> None:
     out1 = json.loads(p.stdout.readline().strip())
     assert out1["id"] == 1
     names = [t["name"] for t in out1["result"]["tools"]]
-    assert "library.ping" in names
+    assert "library_ping" in names
 
     out2 = json.loads(p.stdout.readline().strip())
     assert out2["id"] == 2
@@ -51,7 +51,7 @@ def test_mcp_tools_list_and_call_over_stdio() -> None:
     )
     assert p.stdin is not None and p.stdout is not None
     p.stdin.write(
-        '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"library.ping","arguments":{"message":"hi"},"timeout_ms":0}}\n'
+        '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"library_ping","arguments":{"message":"hi"},"timeout_ms":0}}\n'
     )
     p.stdin.flush()
     p.stdin.close()

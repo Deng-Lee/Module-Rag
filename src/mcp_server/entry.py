@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -79,6 +80,17 @@ def serve_stdio(settings_path: str | Path) -> None:
         timeout_ms = params.get("timeout_ms")
         if not isinstance(name, str) or not name:
             raise ValueError("missing tool name")
+        # Some MCP clients bridge from OpenAI-style tool calls where arguments
+        # may appear as a JSON string (function.arguments). Accept both.
+        if isinstance(args, str):
+            raw = args.strip()
+            if not raw:
+                args = {}
+            else:
+                try:
+                    args = json.loads(raw)
+                except Exception as e:
+                    raise ValueError("tool arguments must be an object or JSON string") from e
         sess = session
         if isinstance(timeout_ms, int) and not isinstance(timeout_ms, bool):
             sess = sess.with_deadline(timeout_ms)
@@ -98,4 +110,3 @@ def main() -> None:
 
 if __name__ == "__main__":  # pragma: no cover
     main()
-

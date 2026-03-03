@@ -77,7 +77,7 @@ def make_tool(*, cfg: GetDocumentToolConfig | None = None) -> FunctionTool:
 
     return FunctionTool(
         spec=ToolSpec(
-            name="library.get_document",
+            name="library_get_document",
             description="Fetch the normalized markdown (facts layer) for a doc_id/version_id.",
             input_schema={
                 "type": "object",
@@ -92,4 +92,3 @@ def make_tool(*, cfg: GetDocumentToolConfig | None = None) -> FunctionTool:
         ),
         fn=_handler,
     )
-

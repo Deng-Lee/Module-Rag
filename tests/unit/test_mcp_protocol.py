@@ -18,9 +18,9 @@ def test_mcp_tools_list_and_call() -> None:
     lst = proto.handle_tools_list(sess)
     assert "tools" in lst
     names = [t["name"] for t in lst["tools"]]
-    assert "library.ping" in names
+    assert "library_ping" in names
 
-    out = proto.handle_tools_call(sess, name="library.ping", args={"message": "hi"})
+    out = proto.handle_tools_call(sess, name="library_ping", args={"message": "hi"})
     assert out["content"][0]["type"] == "text"
     assert "hi" in out["content"][0]["text"]
 
@@ -32,4 +32,3 @@ def test_mcp_tools_call_unknown_tool_is_invalid_params() -> None:
     with pytest.raises(JsonRpcAppError) as e:
         proto.handle_tools_call(sess, name="nope", args={})
     assert e.value.code == -32602
-

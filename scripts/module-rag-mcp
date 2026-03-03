@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Stable, repo-local CLI entrypoint for MCP stdio server.
+# Works without editable-install / console_scripts.
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+PY_BIN="${PYTHON:-python}"
+exec env PYTHONPATH="$ROOT" "$PY_BIN" -m src.mcp_server.cli "$@"
+

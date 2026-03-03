@@ -23,7 +23,7 @@ def _write_settings_yaml(p: Path, *, data_dir: Path) -> None:
             "  logs_dir: logs",
             "",
             "defaults:",
-            "  strategy_config_id: local.default",
+            "  strategy_config_id: local.test",
             "",
         ]
     )
@@ -70,7 +70,7 @@ def test_mcp_query_assets_and_get_document_over_stdio(tmp_path: Path, tmp_workdi
                 "jsonrpc": "2.0",
                 "id": 1,
                 "method": "tools/call",
-                "params": {"name": "library.ingest", "arguments": {"file_path": str(md_path)}},
+                "params": {"name": "library_ingest", "arguments": {"file_path": str(md_path)}},
             },
             ensure_ascii=False,
         )
@@ -83,7 +83,7 @@ def test_mcp_query_assets_and_get_document_over_stdio(tmp_path: Path, tmp_workdi
                 "jsonrpc": "2.0",
                 "id": 2,
                 "method": "tools/call",
-                "params": {"name": "library.query", "arguments": {"query": "image", "top_k": 3}},
+                "params": {"name": "library_query", "arguments": {"query": "image", "top_k": 3}},
             },
             ensure_ascii=False,
         )
@@ -118,7 +118,7 @@ def test_mcp_query_assets_and_get_document_over_stdio(tmp_path: Path, tmp_workdi
                 "jsonrpc": "2.0",
                 "id": 3,
                 "method": "tools/call",
-                "params": {"name": "library.query_assets", "arguments": {"asset_ids": asset_ids, "max_bytes": 200000}},
+                "params": {"name": "library_query_assets", "arguments": {"asset_ids": asset_ids, "max_bytes": 200000}},
             },
             ensure_ascii=False,
         )
@@ -132,7 +132,7 @@ def test_mcp_query_assets_and_get_document_over_stdio(tmp_path: Path, tmp_workdi
                 "id": 4,
                 "method": "tools/call",
                 "params": {
-                    "name": "library.get_document",
+                    "name": "library_get_document",
                     "arguments": {"doc_id": doc_id, "version_id": version_id, "max_chars": 20000},
                 },
             },

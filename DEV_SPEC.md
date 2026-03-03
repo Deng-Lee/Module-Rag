@@ -2224,15 +2224,15 @@ ResponseEnvelope<T> = {
 
 必须支持的 LLM Provider（MVP）
 
-* `llm.openai_compatible`：覆盖 OpenAI 原生、Azure OpenAI、以及兼容 OpenAI API 的自建服务（如 vLLM/本地网关）
-* `llm.anthropic`：覆盖 Claude 系列
-* `llm.deepseek`：覆盖 DeepSeek 云端（或其兼容形态）
-* `llm.ollama` / `llm.vllm`：覆盖本地/自托管推理（优先以 OpenAI-compatible adapter 接入，必要时提供专用 adapter）
+* `openai_compatible`：覆盖 OpenAI 原生、Azure OpenAI、以及兼容 OpenAI API 的自建服务（如 vLLM/本地网关）
+* `anthropic`：覆盖 Claude 系列
+* `deepseek`：覆盖 DeepSeek 云端（或其兼容形态）
+* `ollama` / `vllm`：覆盖本地/自托管推理（优先以 OpenAI-compatible adapter 接入，必要时提供专用 adapter）
 
 其他类型 Provider 的适配准则
 
-* 优先走 `openai_compatible`：若新 Provider 提供 OpenAI-compatible 接口（chat/completions），统一通过 `llm.openai_compatible` 接入，仅通过配置切换 `base_url/endpoint/api_key/model/deployment_name/api_version` 等参数；
-* 不兼容则做专用 adapter：仅当 Provider 在鉴权、路由、流式协议或响应格式上无法被兼容层覆盖时，才新增专用 provider（例如 `llm.<vendor>`），并保持 `llm.generate(mode=...)` 的输入输出契约不变；
+* 优先走 `openai_compatible`：若新 Provider 提供 OpenAI-compatible 接口（chat/completions），统一通过 `openai_compatible` 接入，仅通过配置切换 `base_url/endpoint/api_key/model/deployment_name/api_version` 等参数；
+* 不兼容则做专用 adapter：仅当 Provider 在鉴权、路由、流式协议或响应格式上无法被兼容层覆盖时，才新增专用 provider（例如 `<vendor>`），并保持 `llm.generate(mode=...)` 的输入输出契约不变；
 * 一致的可回放信息：无论兼容层还是专用 adapter，均必须记录 `llm_provider_id/model_id/model_version/prompt_profile_id/mode/trace_id(job_id)`，以支持 A/B、回放与差异解释；
 * 配置即切换点：新增 Provider 的工作量应主要体现在“新增 provider + 补齐配置字段”，避免修改执行层与主流程控制逻辑（对齐 3.4.1/3.4.3）。
 
@@ -2529,7 +2529,7 @@ Artifacts（证据）捕获：评估为什么“可解释”
 本系统允许将 RAGAS 与 DeepEval 作为“指标/评测套件”的 provider 形态接入，例如：
 
 * `metric_set.ragas`：将本系统的 `EvalCase + Artifacts` 映射为 RAGAS 所需输入，输出统一的 `MetricResult[]`；
-* `evaluator.deepeval`：复用本系统的执行链路与 artifacts 捕获，仅将“指标计算/裁判实现”委托给 DeepEval。
+* `deepeval`：复用本系统的执行链路与 artifacts 捕获，仅将“指标计算/裁判实现”委托给 DeepEval。
 
 它们不是第一选项的原因
 
@@ -4163,9 +4163,9 @@ B) Dashboard（Web）
 
 | 组件（Provider ID / 类） | 位置 | 用途（仅开发/测试） | 真实替换路径（示例） |
 | --- | --- | --- | --- |
-| `llm.fake` / `FakeLLM` | `src/libs/providers/llm/fake_llm.py` | 本地无外部 API 生成，占位回答/回显 | `llm.openai_compatible` / `llm.anthropic` / `llm.deepseek` / `llm.ollama` / `llm.vllm` |
-| `embedder.fake` / `FakeEmbedder` | `src/libs/providers/embedding/fake_embedder.py` | deterministic 向量，便于单测与闭环 | 真实 embedding provider（OpenAI/Azure/本地 bge 系列等） |
-| `embedder.bow` / `BowHashEmbedder` | `src/libs/providers/embedding/bow_embedder.py` | 测试用简化稀疏向量/词袋近似 | 真实 sparse encoder 或 BM25/FTS5 方案 |
+| `fake` / `FakeLLM` | `src/libs/providers/llm/fake_llm.py` | 本地无外部 API 生成，占位回答/回显 | `openai_compatible` / `anthropic` / `deepseek` / `ollama` / `vllm` |
+| `fake` / `FakeEmbedder` | `src/libs/providers/embedding/fake_embedder.py` | deterministic 向量，便于单测与闭环 | 真实 embedding provider（OpenAI/Azure/本地 bge 系列等） |
+| `bow` / `BowHashEmbedder` | `src/libs/providers/embedding/bow_embedder.py` | 测试用简化稀疏向量/词袋近似 | 真实 sparse encoder 或 BM25/FTS5 方案 |
 | `vector.in_memory` / `InMemoryVectorIndex` | `src/libs/providers/vector_store/in_memory.py` | 内存向量库，便于单测 | `vector.chroma`（默认）/ `vector.qdrant` / `vector.milvus` / `vector.weaviate` |
 | `vector.chroma_lite` / `ChromaLiteVectorIndex` | `src/libs/providers/vector_store/chroma_lite.py` | 轻量本地持久化替身 | 真实 `Chroma`（persist_directory） |
 | `reranker.noop` / `NoopReranker` | `src/libs/providers/reranker/noop.py` | 不改排序，验证链路 | 真实重排模型（如 bge-reranker / Cohere Rerank / LLM rerank） |

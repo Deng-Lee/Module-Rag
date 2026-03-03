@@ -55,10 +55,22 @@ def make_tool(*, cfg: QueryAssetsToolConfig | None = None) -> FunctionTool:
             raise JsonRpcAppError(INVALID_PARAMS, "missing required param: asset_ids (non-empty string array)")
 
         variant = args.get("variant", cfg.default_variant)
+        # Client-compat: some clients auto-fill `variant: "default"`. Treat it as cfg.default_variant.
+        if variant == "default":
+            variant = cfg.default_variant
         if not isinstance(variant, str) or variant not in {"thumb", "raw"}:
-            raise JsonRpcAppError(INVALID_PARAMS, "invalid param: variant must be thumb|raw")
+            raise JsonRpcAppError(INVALID_PARAMS, "invalid param: variant must be thumb|raw (or 'default')")
 
         max_bytes = args.get("max_bytes", cfg.default_max_bytes)
+        # Client-compat: some clients may pass integers as strings, or `default`.
+        if isinstance(max_bytes, str):
+            if max_bytes.strip() == "default":
+                max_bytes = cfg.default_max_bytes
+            else:
+                try:
+                    max_bytes = int(max_bytes)
+                except Exception as e:
+                    raise JsonRpcAppError(INVALID_PARAMS, "invalid param: max_bytes must be integer") from e
         if isinstance(max_bytes, bool) or not isinstance(max_bytes, int):
             raise JsonRpcAppError(INVALID_PARAMS, "invalid param: max_bytes must be integer")
         if max_bytes < 1:
@@ -125,7 +137,7 @@ def make_tool(*, cfg: QueryAssetsToolConfig | None = None) -> FunctionTool:
 
     return FunctionTool(
         spec=ToolSpec(
-            name="library.query_assets",
+            name="library_query_assets",
             description="Batch fetch asset bytes (default: thumb) using asset_id anchors.",
             input_schema={
                 "type": "object",
@@ -140,4 +152,3 @@ def make_tool(*, cfg: QueryAssetsToolConfig | None = None) -> FunctionTool:
         ),
         fn=_handler,
     )
-

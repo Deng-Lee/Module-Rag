@@ -23,12 +23,24 @@ class McpProtocol:
     tools: ToolRegistry
     server_name: str = "module-rag"
     server_version: str = "0.1"
-    protocol_version: str = "0.1"
+    # MCP uses string-based revision ids `YYYY-MM-DD`. Keep server on a
+    # widely-supported baseline revision for interoperability with clients
+    # like Cline/Cursor/Claude Desktop.
+    protocol_version: str = "2024-11-05"
+    supported_protocol_versions: tuple[str, ...] = ("2024-11-05",)
 
     def handle_initialize(self, params: dict[str, Any] | None) -> dict[str, Any]:
-        _ = params or {}
+        p = params or {}
+        client_ver = p.get("protocolVersion")
+        # Version negotiation (MCP spec):
+        # - If we support the requested version, echo it back.
+        # - Otherwise return our (latest) supported version.
+        if isinstance(client_ver, str) and client_ver in self.supported_protocol_versions:
+            negotiated = client_ver
+        else:
+            negotiated = self.supported_protocol_versions[0]
         return {
-            "protocolVersion": self.protocol_version,
+            "protocolVersion": negotiated,
             "serverInfo": {"name": self.server_name, "version": self.server_version},
             "capabilities": {
                 "tools": {"listChanged": False},

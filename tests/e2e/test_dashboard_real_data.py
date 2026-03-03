@@ -29,7 +29,7 @@ def _write_settings_yaml(p: Path, *, data_dir: Path, logs_dir: Path) -> None:
             f"  logs_dir: {logs_dir.as_posix()}",
             "",
             "defaults:",
-            "  strategy_config_id: local.default",
+            "  strategy_config_id: local.test",
             "",
             "eval:",
             "  datasets_dir: tests/datasets",
@@ -60,18 +60,18 @@ def test_dashboard_with_real_data(tmp_path: Path, tmp_workdir: Path) -> None:
     for doc in docs:
         md_path = tmp_path / f"{doc['name']}.md"
         md_path.write_text(doc["md"], encoding="utf-8")
-        resp = ingester.run(md_path, strategy_config_id="local.default", policy="new_version")
+        resp = ingester.run(md_path, strategy_config_id="local.test", policy="new_version")
         assert resp.structured.get("status") in {"ok", "skipped"}
 
     # Query trace -> JSONL
     obs.set_sink(JsonlSink(logs_dir))
     runner = QueryRunner(settings_path=settings_path)
-    resp = runner.run("FTS5 BM25 inverted index", strategy_config_id="local.default", top_k=5)
+    resp = runner.run("FTS5 BM25 inverted index", strategy_config_id="local.test", top_k=5)
     assert resp.trace_id
 
     # Eval run -> SQLite eval_runs
     evaluator = EvalRunner(settings_path=settings_path)
-    eval_result = evaluator.run("rag_eval_small", strategy_config_id="local.default", top_k=5)
+    eval_result = evaluator.run("rag_eval_small", strategy_config_id="local.test", top_k=5)
     assert eval_result.run_id
 
     settings = load_settings(settings_path)

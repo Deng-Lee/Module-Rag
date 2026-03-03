@@ -23,7 +23,7 @@ def _write_settings_yaml(p: Path, *, data_dir: Path) -> None:
             "  logs_dir: logs",
             "",
             "defaults:",
-            "  strategy_config_id: local.default",
+            "  strategy_config_id: local.test",
             "",
             "eval:",
             "  datasets_dir: tests/datasets",
@@ -96,13 +96,13 @@ def test_mcp_stdio_full_tools(tmp_path: Path, tmp_workdir: Path) -> None:
         tools = out["result"]["tools"]
         names = {t.get("name") for t in tools}
         assert {
-            "library.ingest",
-            "library.query",
-            "library.query_assets",
-            "library.get_document",
-            "library.list_documents",
-            "library.delete_document",
-            "library.ping",
+            "library_ingest",
+            "library_query",
+            "library_query_assets",
+            "library_get_document",
+            "library_list_documents",
+            "library_delete_document",
+            "library_ping",
         }.issubset(names)
 
         # ingest
@@ -112,7 +112,7 @@ def test_mcp_stdio_full_tools(tmp_path: Path, tmp_workdir: Path) -> None:
                 "jsonrpc": "2.0",
                 "id": 2,
                 "method": "tools/call",
-                "params": {"name": "library.ingest", "arguments": {"file_path": str(md_path)}},
+                "params": {"name": "library_ingest", "arguments": {"file_path": str(md_path)}},
             },
         )
         structured = out["result"]["structuredContent"]["structured"]
@@ -127,7 +127,7 @@ def test_mcp_stdio_full_tools(tmp_path: Path, tmp_workdir: Path) -> None:
                 "jsonrpc": "2.0",
                 "id": 3,
                 "method": "tools/call",
-                "params": {"name": "library.query", "arguments": {"query": "hello world", "top_k": 3}},
+                "params": {"name": "library_query", "arguments": {"query": "hello world", "top_k": 3}},
             },
         )
         sc = out["result"]["structuredContent"]
@@ -146,7 +146,7 @@ def test_mcp_stdio_full_tools(tmp_path: Path, tmp_workdir: Path) -> None:
                 "jsonrpc": "2.0",
                 "id": 4,
                 "method": "tools/call",
-                "params": {"name": "library.query_assets", "arguments": {"asset_ids": asset_ids[:1]}},
+                "params": {"name": "library_query_assets", "arguments": {"asset_ids": asset_ids[:1]}},
             },
         )
         assets = out["result"]["structuredContent"]["structured"]["assets"]
@@ -160,7 +160,7 @@ def test_mcp_stdio_full_tools(tmp_path: Path, tmp_workdir: Path) -> None:
                 "id": 5,
                 "method": "tools/call",
                 "params": {
-                    "name": "library.get_document",
+                    "name": "library_get_document",
                     "arguments": {"doc_id": doc_id, "version_id": version_id},
                 },
             },
@@ -174,7 +174,7 @@ def test_mcp_stdio_full_tools(tmp_path: Path, tmp_workdir: Path) -> None:
                 "jsonrpc": "2.0",
                 "id": 6,
                 "method": "tools/call",
-                "params": {"name": "library.list_documents", "arguments": {"include_deleted": True}},
+                "params": {"name": "library_list_documents", "arguments": {"include_deleted": True}},
             },
         )
         items = out["result"]["structuredContent"]["structured"]["items"]
@@ -187,7 +187,7 @@ def test_mcp_stdio_full_tools(tmp_path: Path, tmp_workdir: Path) -> None:
                 "jsonrpc": "2.0",
                 "id": 7,
                 "method": "tools/call",
-                "params": {"name": "library.delete_document", "arguments": {"doc_id": doc_id}},
+                "params": {"name": "library_delete_document", "arguments": {"doc_id": doc_id}},
             },
         )
         assert out["result"]["structuredContent"]["structured"]["status"] in {"ok", "noop"}
@@ -199,7 +199,7 @@ def test_mcp_stdio_full_tools(tmp_path: Path, tmp_workdir: Path) -> None:
                 "jsonrpc": "2.0",
                 "id": 8,
                 "method": "tools/call",
-                "params": {"name": "library.query", "arguments": {"query": "hello world", "top_k": 3}},
+                "params": {"name": "library_query", "arguments": {"query": "hello world", "top_k": 3}},
             },
         )
         sc = out["result"].get("structuredContent", {})

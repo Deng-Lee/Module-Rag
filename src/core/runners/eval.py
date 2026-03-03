@@ -9,13 +9,14 @@ import json
 
 from ..eval import CompositeEvaluator, GenerationMetricSet, MetricSet, load_dataset
 from ..response import ResponseIR
-from ..strategy import load_settings
+from ..strategy import load_settings, merge_provider_overrides
 from .query import QueryRunner
 from ...ingestion.stages.storage.sqlite import SqliteStore
+from ...libs.factories.common import NoopProvider
 from ...libs.factories.evaluator import make_evaluator
+from ...libs.factories.judge import make_judge
 from ...libs.providers import register_builtin_providers
 from ...libs.registry import ProviderRegistry
-from ...libs.providers.evaluator.fake_judge import FakeJudge
 
 
 @dataclass
@@ -56,17 +57,34 @@ class EvalRunner:
         registry = ProviderRegistry()
         register_builtin_providers(registry)
 
+        # Apply model_endpoints to provider params (and strip endpoint_key) before instantiation.
+        merged_providers = merge_provider_overrides(
+            {},
+            settings.raw.get("providers"),
+            settings.raw.get("model_endpoints"),
+        )
+        cfg = dict(settings.raw)
+        cfg["providers"] = merged_providers
+
         evaluator = None
         try:
-            evaluator = make_evaluator(settings.raw, registry)
+            evaluator = make_evaluator(cfg, registry)
         except Exception:
             evaluator = None
 
+        judge = None
+        try:
+            j = make_judge(cfg, registry)
+            if not isinstance(j, NoopProvider):
+                judge = j
+        except Exception:
+            judge = None
+
         if evaluator is None:
-            evaluator = CompositeEvaluator(
-                metric_sets={"retrieval": MetricSet(k=top_k), "generation": GenerationMetricSet()},
-                judge=FakeJudge(),
-            )
+            metric_sets: dict[str, Any] = {"retrieval": MetricSet(k=top_k)}
+            if judge is not None:
+                metric_sets["generation"] = GenerationMetricSet()
+            evaluator = CompositeEvaluator(metric_sets=metric_sets, judge=judge)
 
         cases_out: list[EvalCaseRun] = []
         aggregates: dict[str, list[float]] = {}

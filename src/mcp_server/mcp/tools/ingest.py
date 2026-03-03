@@ -22,12 +22,20 @@ def normalize_ingest_input(args: dict[str, Any], *, cfg: IngestToolConfig) -> tu
     if not isinstance(file_path, str) or not file_path:
         raise JsonRpcAppError(INVALID_PARAMS, "missing required param: file_path")
 
+    # Client-compat: some MCP clients auto-fill `policy: "default"`. Treat it as "skip".
     policy = args.get("policy", "skip")
+    if policy == "default":
+        policy = "skip"
     if not isinstance(policy, str) or policy not in {"skip", "new_version", "continue"}:
-        raise JsonRpcAppError(INVALID_PARAMS, "invalid param: policy must be one of skip|new_version|continue")
+        raise JsonRpcAppError(
+            INVALID_PARAMS,
+            "invalid param: policy must be one of skip|new_version|continue (or 'default')",
+        )
 
     strategy_config_id = args.get("strategy_config_id")
-    if strategy_config_id is None:
+    # Client-compat: some clients auto-fill `strategy_config_id: "default"`.
+    # Treat it as not provided and defer to settings.defaults.strategy_config_id.
+    if strategy_config_id in (None, "default", ""):
         settings = load_settings(cfg.settings_path)
         strategy_config_id = settings.defaults.strategy_config_id
     if not isinstance(strategy_config_id, str) or not strategy_config_id:
@@ -50,7 +58,7 @@ def make_tool(*, runner: IngestRunner, cfg: IngestToolConfig | None = None) -> F
 
     return FunctionTool(
         spec=ToolSpec(
-            name="library.ingest",
+            name="library_ingest",
             description="Ingest a local document (pdf/md) into the library (dedup→chunk→embed→upsert).",
             input_schema={
                 "type": "object",

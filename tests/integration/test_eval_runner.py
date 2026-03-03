@@ -24,7 +24,7 @@ def _write_settings_yaml(p: Path, *, data_dir: Path) -> None:
             "  logs_dir: logs",
             "",
             "defaults:",
-            "  strategy_config_id: local.default",
+            "  strategy_config_id: local.test",
             "",
         ]
     )
@@ -51,11 +51,11 @@ def test_eval_runner_smoke(tmp_path: Path, tmp_workdir: Path) -> None:
     for doc in docs:
         md_path = tmp_path / f"{doc['name']}.md"
         md_path.write_text(doc["md"], encoding="utf-8")
-        resp = ingester.run(md_path, strategy_config_id="local.default", policy="new_version")
+        resp = ingester.run(md_path, strategy_config_id="local.test", policy="new_version")
         assert resp.structured.get("status") in {"ok", "skipped"}
 
     evaluator = EvalRunner(settings_path=settings_path)
-    result = evaluator.run("rag_eval_small", strategy_config_id="local.default", top_k=5)
+    result = evaluator.run("rag_eval_small", strategy_config_id="local.test", top_k=5)
 
     assert result.dataset_id == "rag_eval_small"
     assert result.cases

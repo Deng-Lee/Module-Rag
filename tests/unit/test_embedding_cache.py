@@ -11,13 +11,13 @@ def test_make_embedding_cache_key_stable() -> None:
     k1 = make_embedding_cache_key(
         text_norm_profile_id="default",
         content_hash=ch,
-        embedder_id="embedder.fake",
+        embedder_id="fake",
         embedder_version="0",
     )
     k2 = make_embedding_cache_key(
         text_norm_profile_id="default",
         content_hash=ch,
-        embedder_id="embedder.fake",
+        embedder_id="fake",
         embedder_version="0",
     )
     assert k1 == k2
@@ -28,7 +28,7 @@ def test_embedding_cache_hit_on_second_run() -> None:
     stage = EmbeddingStage(
         embedder=FakeEmbedder(dim=4),
         cache=cache,
-        embedder_id="embedder.fake",
+        embedder_id="fake",
         embedder_version="0",
     )
 
