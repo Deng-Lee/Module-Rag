@@ -144,7 +144,9 @@ def make_tool(*, cfg: QueryAssetsToolConfig | None = None) -> FunctionTool:
                 "properties": {
                     "asset_ids": {"type": "array"},
                     "variant": {"type": "string"},
-                    "max_bytes": {"type": "integer"},
+                    # Keep schema permissive and validate precisely in handler:
+                    # supports int, numeric string, and "default".
+                    "max_bytes": {},
                 },
                 "required": ["asset_ids"],
                 "additionalProperties": False,

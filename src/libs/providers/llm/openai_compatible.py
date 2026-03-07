@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from typing import Any
 
 import httpx
 
 from ...interfaces.llm import LLMResult
+from ....observability.obs import api as obs
 
 
 @dataclass
@@ -38,9 +40,27 @@ class OpenAICompatibleLLM:
         payload.update(kwargs or {})
 
         with httpx.Client(timeout=self.timeout_s) as client:
-            res = client.post(url, headers=headers, json=payload)
-            res.raise_for_status()
-            data = res.json()
+            try:
+                res = client.post(url, headers=headers, json=payload)
+                res.raise_for_status()
+                data = res.json()
+            except httpx.HTTPStatusError as e:
+                resp = e.response
+                status = getattr(resp, "status_code", None)
+                text = getattr(resp, "text", "")
+                try:
+                    obs.event("llm.http_error", {"url": url, "status": status, "response_snippet": (text[:1000] if isinstance(text, str) else repr(text))})
+                except Exception:
+                    logging.exception("failed to emit llm observability event")
+                logging.error("LLM HTTP error %s %s: %s", status, url, text[:1000])
+                raise
+            except httpx.RequestError as e:
+                try:
+                    obs.event("llm.request_error", {"url": url, "error": str(e)})
+                except Exception:
+                    logging.exception("failed to emit llm observability event")
+                logging.exception("LLM request failed for %s", url)
+                raise
 
         text = _extract_text(data)
         usage = data.get("usage", {}) if isinstance(data, dict) else {}

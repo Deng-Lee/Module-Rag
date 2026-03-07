@@ -87,8 +87,65 @@ class RagasAdapter:
             env["OPENAI_MODEL"] = self.model
 
         try:
+            # Prefer constructing an explicit ragas LLM using provided api_key/base_url
+            llm_obj = None
+            try:
+                from openai import OpenAI  # type: ignore
+                from ragas.llms import llm_factory  # type: ignore
+
+                client_args: dict[str, str] = {}
+                if isinstance(self.api_key, str) and self.api_key:
+                    client_args["api_key"] = self.api_key
+                if isinstance(self.base_url, str) and self.base_url:
+                    client_args["base_url"] = self.base_url
+                # Only create a client when we have at least one connection parameter.
+                if client_args:
+                    client = OpenAI(**client_args)
+                    llm_obj = llm_factory(self.model or "gpt-4o-mini", client=client)
+            except Exception:
+                llm_obj = None
+
+            # Try to construct a ragas-compatible embeddings object backed by the
+            # same OpenAI-compatible client. Ragas expects an object exposing
+            # methods like `embed_query` and `embed_documents`.
+            emb_obj = None
+            try:
+                if 'client' in locals():
+                    embedding_model = os.environ.get('OPENAI_EMBEDDING_MODEL') or os.environ.get('OPENAI_MODEL') or 'text-embedding-3-small'
+
+                    class _RagasEmbeddings:
+                        def __init__(self, client, model: str):
+                            self._client = client
+                            self._model = model
+
+                        def embed_query(self, text: str):
+                            resp = self._client.embeddings.create(model=self._model, input=text)
+                            # OpenAI response: data[0].embedding
+                            return resp.data[0].embedding
+
+                        def embed_documents(self, texts: list[str]):
+                            resp = self._client.embeddings.create(model=self._model, input=texts)
+                            return [d.embedding for d in resp.data]
+
+                        # ragas may call other helper names; provide a common alias
+                        def embed(self, texts: list[str]):
+                            return self.embed_documents(texts)
+
+                    emb_obj = _RagasEmbeddings(client, embedding_model)
+            except Exception:
+                emb_obj = None
+
             with _temp_env(env) if env else _temp_env({}):
-                result = evaluate(dataset, metrics=[faithfulness, answer_relevancy])
+                if llm_obj is not None:
+                    if emb_obj is not None:
+                        result = evaluate(dataset, metrics=[faithfulness, answer_relevancy], llm=llm_obj, embeddings=emb_obj, show_progress=False)
+                    else:
+                        result = evaluate(dataset, metrics=[faithfulness, answer_relevancy], llm=llm_obj, show_progress=False)
+                else:
+                    if emb_obj is not None:
+                        result = evaluate(dataset, metrics=[faithfulness, answer_relevancy], embeddings=emb_obj, show_progress=False)
+                    else:
+                        result = evaluate(dataset, metrics=[faithfulness, answer_relevancy], show_progress=False)
         except Exception as exc:
             return EvalCaseResult(
                 case_id=_case_id(case),

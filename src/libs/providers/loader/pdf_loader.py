@@ -51,9 +51,15 @@ def _extract_text(raw: bytes, path: Path) -> tuple[str, int | None, list[str]]:
         for i in range(doc.page_count):
             page = doc.load_page(i)
             text = page.get_text("text") or ""
-            if text.strip():
-                texts.append(text.strip())
-        md = "\n\n".join(texts)
+            # Emit page headings to preserve a minimal structure boundary for downstream
+            # sectioner/chunker and to enable page-scoped metadata attachment (e.g. assets).
+            heading = f"## Page {i + 1}"
+            body = text.strip()
+            if body:
+                texts.append(f"{heading}\n\n{body}")
+            else:
+                texts.append(f"{heading}\n\n")
+        md = "\n\n".join(t.strip("\n") for t in texts).strip() + "\n"
         pages = int(doc.page_count)
         doc.close()
         return md, pages, warnings
@@ -65,11 +71,15 @@ def _extract_text(raw: bytes, path: Path) -> tuple[str, int | None, list[str]]:
 
         reader = PdfReader(raw)
         texts: list[str] = []
-        for page in reader.pages:
+        for i, page in enumerate(reader.pages):
             text = page.extract_text() or ""
-            if text:
-                texts.append(text)
-        md = "\n\n".join(t.strip() for t in texts if t.strip())
+            heading = f"## Page {i + 1}"
+            body = text.strip()
+            if body:
+                texts.append(f"{heading}\n\n{body}")
+            else:
+                texts.append(f"{heading}\n\n")
+        md = "\n\n".join(t.strip("\n") for t in texts).strip() + "\n"
         pages = len(reader.pages)
         return md, pages, warnings
     except Exception:

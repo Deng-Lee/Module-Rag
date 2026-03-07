@@ -10,15 +10,24 @@ TOP_K="${3:-5}"
 
 PYTHONPATH=. .venv/bin/python - "$DATASET_ID" "$STRATEGY_ID" "$TOP_K" <<'PY'
 import json
+import os
 import sys
 
+from src.core.strategy import load_settings
+from src.observability.sinks.jsonl import JsonlSink
+from src.observability.obs import set_sink
 from src.core.runners.eval import EvalRunner
 
 dataset_id = sys.argv[1]
 strategy_id = sys.argv[2]
 top_k = int(sys.argv[3])
 
-runner = EvalRunner()
+settings_path = os.environ.get("MODULE_RAG_SETTINGS_PATH", "config/settings.yaml")
+# Ensure observability sink writes traces for CLI runs
+settings = load_settings(settings_path)
+set_sink(JsonlSink(settings.paths.logs_dir))
+
+runner = EvalRunner(settings_path=settings_path)
 result = runner.run(dataset_id, strategy_config_id=strategy_id, top_k=top_k)
 print(json.dumps({"run_id": result.run_id, "metrics": result.metrics}, ensure_ascii=False, indent=2))
 for case in result.cases:

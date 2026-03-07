@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -57,6 +58,8 @@ class IngestState:
 
 
 PipelineBuilder = Callable[[str, Path], IngestionPipeline]
+
+_PDF_PAGE_SECTION_RE = re.compile(r"^Page\s+(\d+)$", re.IGNORECASE)
 
 
 @dataclass
@@ -185,7 +188,7 @@ def _build_ingestion_pipeline(strategy_config_id: str, *, settings_path: Path) -
     except Exception:
         pass
 
-    transform_post = TransformPostStage(view_cfg=view_cfg, enrichers=enrichers or None)
+    transform_post = TransformPostStage(view_cfg=view_cfg, enrichers=enrichers or None, sqlite=sqlite_store)
     embedding = EmbeddingStage(
         embedder=embedder,
         embedder_id=embedder_provider_id,
@@ -236,6 +239,52 @@ def _build_ingestion_pipeline(strategy_config_id: str, *, settings_path: Path) -
         assert state.md_norm is not None
         sections, _ = sectioner.run(state.md_norm, doc_id=state.doc_id)
         state.sections = sections
+        return state
+
+    def st_section_assets(state: IngestState, ctx) -> IngestState:
+        """Attach PDF page-scoped asset_ids onto sections (so all chunks inherit them).
+
+        Rationale: PDF loader produces per-page headings (e.g. '## Page 3'). Loader assets carry
+        anchor.page. We map page -> asset_ids, then annotate the corresponding section metadata.
+        Chunkers then propagate section.metadata['asset_ids'] into each chunk's metadata, without
+        injecting asset markers into chunk_text.
+        """
+        if state.skipped:
+            return state
+        if not state.sections or not state.loader_assets or not state.normalized_assets:
+            return state
+
+        # Only apply when this doc is a PDF-like source.
+        if not any(getattr(a, "source_type", "") == "pdf" for a in state.loader_assets):
+            return state
+
+        page_to_asset_ids: dict[int, list[str]] = {}
+        for a in state.loader_assets:
+            if getattr(a, "source_type", "") != "pdf":
+                continue
+            anchor = getattr(a, "anchor", None) or {}
+            page = anchor.get("page")
+            if not isinstance(page, int) or page <= 0:
+                continue
+            asset_id = state.normalized_assets.ref_to_asset_id.get(getattr(a, "ref_id", ""))
+            if not isinstance(asset_id, str) or not asset_id:
+                continue
+            page_to_asset_ids.setdefault(page, []).append(asset_id)
+
+        if not page_to_asset_ids:
+            return state
+
+        for sec in state.sections:
+            # We only trust the exact synthetic heading format.
+            m = _PDF_PAGE_SECTION_RE.match(sec.section_path.strip() if isinstance(sec.section_path, str) else "")
+            if not m:
+                continue
+            page = int(m.group(1))
+            sec.metadata["page"] = page
+            aids = page_to_asset_ids.get(page) or []
+            if aids:
+                # Dedup while preserving order.
+                sec.metadata["asset_ids"] = list(dict.fromkeys(aids).keys())
         return state
 
     def st_chunker(state: IngestState, ctx) -> IngestState:
@@ -306,6 +355,7 @@ def _build_ingestion_pipeline(strategy_config_id: str, *, settings_path: Path) -
         StageSpec(name="asset_normalize", fn=st_asset_normalize),
         StageSpec(name="transform_pre", fn=st_transform_pre),
         StageSpec(name="sectioner", fn=st_sectioner),
+        StageSpec(name="section_assets", fn=st_section_assets),
         StageSpec(name="chunker", fn=st_chunker),
         StageSpec(name="transform_post", fn=st_transform_post),
         StageSpec(name="embedding", fn=st_embedding),

@@ -43,7 +43,9 @@ class ChromaVectorIndex:
     def query(self, vector: list[float], top_k: int) -> list[tuple[str, float]]:
         if top_k <= 0:
             return []
-        res: Any = self._col.query(query_embeddings=[vector], n_results=int(top_k), include=["distances", "ids"])
+        # `ids` are always returned by Chroma; `include` only controls extra fields.
+        # Newer chromadb versions reject "ids" in include (ValueError).
+        res: Any = self._col.query(query_embeddings=[vector], n_results=int(top_k), include=["distances"])
         ids = (res.get("ids") or [[]])[0]
         dists = (res.get("distances") or [[]])[0]
         out: list[tuple[str, float]] = []
@@ -66,4 +68,3 @@ def _distance_to_score(dist: float, *, space: str) -> float:
     if sp == "cosine":
         return 1.0 - dist
     return -dist
-

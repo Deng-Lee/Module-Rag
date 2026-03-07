@@ -4,6 +4,9 @@ from dataclasses import dataclass
 from typing import Any, Iterable
 
 import httpx
+import logging
+
+from ....observability.obs import api as obs
 
 
 def _chunks(items: list[str], size: int) -> Iterable[list[str]]:
@@ -22,7 +25,9 @@ class OpenAICompatibleEmbedder:
     api_key: str
     model: str
     timeout_s: float = 60.0
-    batch_size: int = 128
+    # Some providers enforce small embedding batch sizes (e.g., qwen <= 10).
+    # Use 10 as a safe default; can be overridden via provider params.
+    batch_size: int = 10
     dimensions: int | None = None
     extra_headers: dict[str, str] | None = None
 
@@ -44,10 +49,30 @@ class OpenAICompatibleEmbedder:
                 payload: dict[str, Any] = {"model": self.model, "input": batch}
                 if self.dimensions is not None:
                     payload["dimensions"] = self.dimensions
-                res = client.post(url, headers=headers, json=payload)
-                res.raise_for_status()
-                data = res.json()
-                out.extend(_extract_embeddings(data))
+                try:
+                    res = client.post(url, headers=headers, json=payload)
+                    res.raise_for_status()
+                    data = res.json()
+                    out.extend(_extract_embeddings(data))
+                except httpx.HTTPStatusError as e:
+                    resp = e.response
+                    status = getattr(resp, "status_code", None)
+                    text = getattr(resp, "text", "")
+                    # Emit observability event with trimmed response body
+                    try:
+                        obs.event("embedder.http_error", {"url": url, "status": status, "response_snippet": (text[:1000] if isinstance(text, str) else repr(text))})
+                    except Exception:
+                        logging.exception("failed to emit embedder observability event")
+                    logging.error("Embedding HTTP error %s %s: %s", status, url, text[:1000])
+                    raise
+                except httpx.RequestError as e:
+                    # Network / timeout / DNS errors
+                    try:
+                        obs.event("embedder.request_error", {"url": url, "error": str(e)})
+                    except Exception:
+                        logging.exception("failed to emit embedder observability event")
+                    logging.exception("Embedding request failed for %s", url)
+                    raise
 
         if len(out) != len(texts):
             raise ValueError("embedding_count_mismatch")

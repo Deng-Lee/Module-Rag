@@ -45,14 +45,24 @@ class RecursiveCharChunkerWithinSection(Chunker):
             chunk_index = 0
             for text in section_chunks:
                 chunk_index += 1
-                meta = {
-                    "section_id": section.section_id,
-                    "chunk_index": chunk_index,
-                    "section_path": section.section_path,
-                }
-                asset_ids = _extract_asset_ids(text)
-                if asset_ids:
-                    meta["asset_ids"] = asset_ids
+                meta = dict(section.metadata or {})
+                meta.update(
+                    {
+                        "section_id": section.section_id,
+                        "chunk_index": chunk_index,
+                        "section_path": section.section_path,
+                    }
+                )
+
+                base_asset_ids: list[str] = []
+                if isinstance(section.metadata.get("asset_ids"), list):
+                    base_asset_ids = [x for x in section.metadata.get("asset_ids") if isinstance(x, str) and x]
+                text_asset_ids = _extract_asset_ids(text)
+                merged = list(dict.fromkeys(base_asset_ids + text_asset_ids).keys())
+                if merged:
+                    meta["asset_ids"] = merged
+                else:
+                    meta.pop("asset_ids", None)
 
                 chunks.append(ChunkIR(chunk_id="", section_path=section.section_path, text=text, metadata=meta))
 

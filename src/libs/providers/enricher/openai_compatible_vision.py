@@ -14,14 +14,16 @@ from ....ingestion.stages.transform.transform_post import Enricher
 
 
 _ASSET_LINK_RE = re.compile(r"asset://(?P<asset_id>[a-f0-9]{64})")
+_ASSET_ID_RE = re.compile(r"^[a-f0-9]{64}$")
 
 
 @dataclass
 class OpenAICompatibleVisionEnricher(Enricher):
     """Generate OCR + caption snippets for images referenced in chunk text.
 
-    This enricher scans for `asset://{sha256}` links in the facts layer and calls an
-    OpenAI-compatible vision endpoint to produce a compact JSON payload.
+    This enricher scans for `asset://{sha256}` links in the facts layer and also
+    reads `chunk.metadata.asset_ids[]` for PDF inputs, then calls an OpenAI-compatible
+    vision endpoint to produce a compact JSON payload.
     """
 
     base_url: str
@@ -30,10 +32,12 @@ class OpenAICompatibleVisionEnricher(Enricher):
     assets_dir: str = "data/assets"
     timeout_s: float = 60.0
     max_assets_per_chunk: int = 3
+    provider_id: str = "openai_compatible_vision"
+    profile_id: str = "default"
 
     def enrich(self, chunk):  # type: ignore[override]
         text = getattr(chunk, "text", "") or ""
-        asset_ids = list(dict.fromkeys(_ASSET_LINK_RE.findall(text)))
+        asset_ids = collect_asset_ids(text, getattr(chunk, "metadata", None))
         if not asset_ids:
             return {}
         asset_ids = asset_ids[: max(0, int(self.max_assets_per_chunk))]
@@ -41,6 +45,7 @@ class OpenAICompatibleVisionEnricher(Enricher):
             return {}
 
         snippets: list[str] = []
+        vision_assets: list[dict[str, Any]] = []
         for asset_id in asset_ids:
             payload = self._caption_and_ocr(asset_id)
             if not payload:
@@ -51,10 +56,18 @@ class OpenAICompatibleVisionEnricher(Enricher):
                 snippets.append(f"[image_caption asset_id={asset_id}] {caption}")
             if ocr:
                 snippets.append(f"[image_ocr asset_id={asset_id}] {ocr}")
+            vision_assets.append(
+                {
+                    "asset_id": asset_id,
+                    "caption": caption,
+                    "ocr_text": ocr,
+                    "raw": payload,
+                }
+            )
 
-        if not snippets:
+        if not snippets and not vision_assets:
             return {}
-        return {"vision_snippets": snippets}
+        return {"vision_snippets": snippets, "vision_assets": vision_assets}
 
     def _caption_and_ocr(self, asset_id: str) -> dict[str, Any] | None:
         path = _resolve_asset_path(Path(self.assets_dir), asset_id)
@@ -165,3 +178,24 @@ def _extract_json(text: str) -> str:
         return text[start : end + 1]
     return text
 
+
+def collect_asset_ids(text: str, metadata: Any) -> list[str]:
+    """Collect asset ids from facts text and chunk metadata (dedup, stable order)."""
+    ordered: list[str] = []
+
+    # 1) From facts layer `asset://{sha256}` links (Markdown path).
+    for asset_id in _ASSET_LINK_RE.findall(text or ""):
+        if asset_id not in ordered:
+            ordered.append(asset_id)
+
+    # 2) From chunk metadata `asset_ids[]` (PDF path).
+    asset_ids = None
+    if isinstance(metadata, dict):
+        asset_ids = metadata.get("asset_ids")
+    if isinstance(asset_ids, list):
+        for v in asset_ids:
+            if isinstance(v, str) and _ASSET_ID_RE.fullmatch(v):
+                if v not in ordered:
+                    ordered.append(v)
+
+    return ordered

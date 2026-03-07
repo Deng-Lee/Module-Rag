@@ -1,0 +1,4 @@
+interface:
+  display_name: "Dev Spec Highlights"
+  short_description: "Extract project highlights from DEV_SPEC for LLM dev role"
+  default_prompt: "From DEV_SPEC.md, extract 5-8 project highlights (title, technical points, resume phrasing) and save to PROJECT_HIGHLIGHTS.md"

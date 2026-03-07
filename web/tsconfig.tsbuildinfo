@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/api/client.ts","./src/routes/browser.tsx","./src/routes/evalpanel.tsx","./src/routes/ingestion.tsx","./src/routes/ingestiontrace.tsx","./src/routes/overview.tsx","./src/routes/querytrace.tsx"],"version":"5.9.3"}

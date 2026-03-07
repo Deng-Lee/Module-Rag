@@ -107,6 +107,37 @@ class SqliteStore:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS asset_enrichments (
+                    asset_id TEXT,
+                    provider_id TEXT,
+                    model TEXT,
+                    profile_id TEXT,
+                    ocr_text TEXT,
+                    caption_text TEXT,
+                    raw_json TEXT,
+                    created_at REAL,
+                    updated_at REAL,
+                    PRIMARY KEY(asset_id, provider_id, model, profile_id)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS chunk_enrichments (
+                    chunk_id TEXT,
+                    provider_id TEXT,
+                    model TEXT,
+                    profile_id TEXT,
+                    retrieval_template_id TEXT,
+                    vision_snippets_json TEXT,
+                    created_at REAL,
+                    updated_at REAL,
+                    PRIMARY KEY(chunk_id, provider_id, profile_id)
+                )
+                """
+            )
 
             conn.execute(
                 """
@@ -367,6 +398,109 @@ class SqliteStore:
                 (chunk_id, asset_id),
             )
 
+    def upsert_asset_enrichment(
+        self,
+        *,
+        asset_id: str,
+        provider_id: str,
+        model: str,
+        profile_id: str,
+        ocr_text: str | None = None,
+        caption_text: str | None = None,
+        raw_json: str | None = None,
+    ) -> None:
+        ts = time.time()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO asset_enrichments(
+                    asset_id, provider_id, model, profile_id, ocr_text, caption_text, raw_json, created_at, updated_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, COALESCE(
+                    (SELECT created_at FROM asset_enrichments WHERE asset_id=? AND provider_id=? AND model=? AND profile_id=?),
+                    ?
+                ), ?)
+                """,
+                (
+                    asset_id,
+                    provider_id,
+                    model,
+                    profile_id,
+                    ocr_text,
+                    caption_text,
+                    raw_json,
+                    asset_id,
+                    provider_id,
+                    model,
+                    profile_id,
+                    ts,
+                    ts,
+                ),
+            )
+
+    def upsert_chunk_enrichment(
+        self,
+        *,
+        chunk_id: str,
+        provider_id: str,
+        model: str,
+        profile_id: str,
+        retrieval_template_id: str | None = None,
+        vision_snippets_json: str | None = None,
+    ) -> None:
+        ts = time.time()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO chunk_enrichments(
+                    chunk_id, provider_id, model, profile_id, retrieval_template_id, vision_snippets_json, created_at, updated_at
+                ) VALUES(?, ?, ?, ?, ?, ?, COALESCE(
+                    (SELECT created_at FROM chunk_enrichments WHERE chunk_id=? AND provider_id=? AND profile_id=?),
+                    ?
+                ), ?)
+                """,
+                (
+                    chunk_id,
+                    provider_id,
+                    model,
+                    profile_id,
+                    retrieval_template_id,
+                    vision_snippets_json,
+                    chunk_id,
+                    provider_id,
+                    profile_id,
+                    ts,
+                    ts,
+                ),
+            )
+
+    def fetch_chunk_enrichments(self, chunk_ids: list[str]) -> dict[str, dict[str, Any]]:
+        if not chunk_ids:
+            return {}
+        placeholders = ",".join(["?"] * len(chunk_ids))
+        sql = f"""
+            SELECT chunk_id, provider_id, model, profile_id, retrieval_template_id, vision_snippets_json, created_at, updated_at
+            FROM chunk_enrichments
+            WHERE chunk_id IN ({placeholders})
+        """
+        with self._connect() as conn:
+            rows = conn.execute(sql, tuple(chunk_ids)).fetchall()
+        out: dict[str, dict[str, Any]] = {}
+        for r in rows:
+            cid = str(r["chunk_id"])
+            out.setdefault(cid, {"items": []})
+            out[cid]["items"].append(
+                {
+                    "provider_id": str(r["provider_id"] or ""),
+                    "model": str(r["model"] or ""),
+                    "profile_id": str(r["profile_id"] or ""),
+                    "retrieval_template_id": str(r["retrieval_template_id"] or ""),
+                    "vision_snippets_json": str(r["vision_snippets_json"] or ""),
+                    "created_at": float(r["created_at"] or 0.0),
+                    "updated_at": float(r["updated_at"] or 0.0),
+                }
+            )
+        return out
+
     def upsert_eval_run(
         self,
         *,
@@ -510,6 +644,35 @@ class SqliteStore:
         out: dict[str, str | None] = {}
         for r in rows:
             out[str(r["asset_id"])] = (str(r["rel_path"]) if r["rel_path"] is not None else None)
+        return out
+
+    def fetch_asset_enrichments(self, asset_ids: list[str]) -> dict[str, dict[str, Any]]:
+        if not asset_ids:
+            return {}
+        placeholders = ",".join(["?"] * len(asset_ids))
+        sql = f"""
+            SELECT asset_id, provider_id, model, profile_id, ocr_text, caption_text, raw_json, created_at, updated_at
+            FROM asset_enrichments
+            WHERE asset_id IN ({placeholders})
+        """
+        with self._connect() as conn:
+            rows = conn.execute(sql, tuple(asset_ids)).fetchall()
+        out: dict[str, dict[str, Any]] = {}
+        for r in rows:
+            aid = str(r["asset_id"])
+            out.setdefault(aid, {"items": []})
+            out[aid]["items"].append(
+                {
+                    "provider_id": str(r["provider_id"] or ""),
+                    "model": str(r["model"] or ""),
+                    "profile_id": str(r["profile_id"] or ""),
+                    "ocr_text": str(r["ocr_text"] or ""),
+                    "caption_text": str(r["caption_text"] or ""),
+                    "raw_json": str(r["raw_json"] or ""),
+                    "created_at": float(r["created_at"] or 0.0),
+                    "updated_at": float(r["updated_at"] or 0.0),
+                }
+            )
         return out
 
     def fetch_doc_version_hashes(self, *, doc_id: str, version_id: str | None = None) -> list[str]:

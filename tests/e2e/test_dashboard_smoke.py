@@ -58,6 +58,23 @@ def test_dashboard_api_smoke(tmp_path: Path) -> None:
         chunk_text="hello",
     )
     sqlite.upsert_chunk_asset(chunk_id="chk_1", asset_id="asset_1")
+    sqlite.upsert_asset_enrichment(
+        asset_id="asset_1",
+        provider_id="vision.fake",
+        model="fake-model",
+        profile_id="p1",
+        ocr_text="ocr",
+        caption_text="cap",
+        raw_json='{"v":1}',
+    )
+    sqlite.upsert_chunk_enrichment(
+        chunk_id="chk_1",
+        provider_id="vision.fake",
+        model="fake-model",
+        profile_id="p1",
+        retrieval_template_id="facts_plus_enrich",
+        vision_snippets_json='["[image_caption asset_id=asset_1] cap"]',
+    )
 
     app = create_app(settings)
     client = TestClient(app)
@@ -73,7 +90,11 @@ def test_dashboard_api_smoke(tmp_path: Path) -> None:
 
     r = client.get("/api/trace/trace_dash")
     assert r.status_code == 200
-    assert r.json().get("trace_id") == "trace_dash"
+    payload = r.json()
+    if isinstance(payload.get("trace"), dict):
+        assert payload["trace"].get("trace_id") == "trace_dash"
+    else:
+        assert payload.get("trace_id") == "trace_dash"
 
     r = client.get("/api/documents?limit=5")
     assert r.status_code == 200
@@ -81,7 +102,11 @@ def test_dashboard_api_smoke(tmp_path: Path) -> None:
 
     r = client.get("/api/chunk/chk_1")
     assert r.status_code == 200
-    assert r.json().get("chunk_id") == "chk_1"
+    body = r.json()
+    assert body.get("chunk_id") == "chk_1"
+    assert "enrichments" in body
+    assert "chunk" in body["enrichments"]
+    assert "assets" in body["enrichments"]
 
     # Negative payloads should return structured errors without crashing.
     r = client.post("/api/ingest", json={})
@@ -91,6 +116,10 @@ def test_dashboard_api_smoke(tmp_path: Path) -> None:
     r = client.post("/api/delete", json={})
     assert r.status_code == 200
     assert r.json().get("status") == "error"
+
+    r = client.post("/api/eval/run", json={"dataset_id": "rag_eval_small", "top_k": 3})
+    assert r.status_code == 200
+    assert r.json().get("status") in {"ok", "error"}
 
     r = client.get("/api/eval/runs")
     assert r.status_code == 200

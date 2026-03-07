@@ -20,16 +20,25 @@ fi
 
 PYTHONPATH=. .venv/bin/python - "$FILE_PATH" "$STRATEGY_ID" "$POLICY" <<'PY'
 import json
+import os
 import sys
 from pathlib import Path
 
 from src.core.runners.ingest import IngestRunner
+from src.core.strategy import load_settings
+from src.observability.sinks.jsonl import JsonlSink
+from src.observability.obs import set_sink
 
 file_path = Path(sys.argv[1])
 strategy_id = sys.argv[2]
 policy = sys.argv[3]
 
-runner = IngestRunner()
+settings_path = os.environ.get("MODULE_RAG_SETTINGS_PATH", "config/settings.yaml")
+# Ensure observability sink writes traces for CLI runs
+settings = load_settings(settings_path)
+set_sink(JsonlSink(settings.paths.logs_dir))
+
+runner = IngestRunner(settings_path=settings_path)
 resp = runner.run(file_path, strategy_config_id=strategy_id, policy=policy)
 print(resp.content_md)
 structured = dict(resp.structured or {})

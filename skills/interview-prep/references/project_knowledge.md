@@ -1,0 +1,269 @@
+# 项目技术知识库 — 面试官参考手册
+
+> 本文件供面试官（AI Agent）使用，包含本项目的关键实现细节、高频面试题及参考答案。
+> 面试过程中用于生成精准追问和评估候选人回答质量。
+
+---
+
+## 模块一：Hybrid Search 混合检索
+
+### 核心实现
+- **双路并行召回**：Dense（向量语义）+ Sparse（BM25 关键词）同时执行
+- **融合算法**：RRF（Reciprocal Rank Fusion）  
+  公式：`Score = 1/(k + Rank_Dense) + 1/(k + Rank_Sparse)`，k 通常取 60
+- **为什么用 RRF 而不是线性加权**：RRF 无需对不同路的分数值做归一化，对排名稳健，不依赖各路分数的绝对尺度
+- **Dense Route**：计算 Query Embedding → Cosine Similarity → Top-N 语义候选
+- **Sparse Route**：BM25 倒排索引 → Top-N 关键词候选
+
+### 高频面试题
+
+**Q: 为什么要做 Hybrid Search？BM25 和向量检索各有什么优劣？**  
+A: BM25（稀疏检索）擅长精确关键词匹配，对专有名词（如 API 名称、产品型号）效果好；Dense Embedding（稠密检索）擅长语义理解，处理同义词、模糊表达时优势明显。两者互补：BM25 查准率高但泛化差，Dense 泛化好但关键词精确度弱。Hybrid Search 结合两者，用 RRF 融合，平衡 Precision 和 Recall。
+
+**Q: RRF 公式里 k=60 是怎么来的？**  
+A: k 是平滑因子，防止排名靠前的文档分数过度高估。k=60 是学术论文（Cormack et al. 2009）中的经验推荐值，实践中通常无需调整。调大 k 会使分数分布更均匀（减弱头部文档优势），调小 k 会使分数差异更大。
+
+**Q: 你们的 BM25 索引存在哪里？IDF 怎么算的？**  
+A: 当前 BM25/Sparse 检索落在 `fts.sqlite` 的 FTS5 虚表 `chunks_fts` 上，upsert 时按 `chunk_id + text` 写入，查询时通过 `MATCH + bm25(chunks_fts)` 返回候选与分数。工程上我们不再自己维护一套显式的 IDF 字典或 `bm25/` 目录索引文件，而是把分词匹配、倒排组织和 BM25 打分交给 SQLite FTS5；面试时更应该考察候选人是否理解“为什么这里选 FTS5 做本地稀疏检索、它和 Dense 路召回如何对齐”，而不是背旧版 pickle 结构。
+
+---
+
+## 模块二：Reranker 精排
+
+### 核心实现
+- **两段式架构**：粗排召回（低成本泛召回）→ 精排过滤（高成本精确排序）
+- <span style="color:red">**支持三种后端**：</span>
+  1. `None`：直接返回 RRF Top-K
+  2. <span style="color:red">`Cross-Encoder`：本地 Sentence-Transformers 模型，输入 `[Query, Chunk]` 对打分</span>
+  3. `LLM Rerank`：用 LLM 对候选集排序，输出 JSON ranked ids
+- **Graceful Fallback**：精排失败/超时时自动回退到 RRF 排名，保证系统可用性
+> Hint：源码里当前注册的 Reranker 只有 `noop` / `reranker.noop` 与 `openai_compatible_llm`，没有已落地的 `Cross-Encoder` provider。
+  - 修正子描述：当前精排能力以“跳过精排”或“LLM 精排”为主，`openai_compatible_llm` 负责对候选集进行重排；当精排器缺失或执行异常时，查询链路直接回退到原始 RRF 排名。
+
+### 高频面试题
+
+**Q: Cross-Encoder 和 Bi-Encoder 的区别？为什么 Cross-Encoder 不能做粗排召回？**  
+<span style="color:red">A: Bi-Encoder（如 Dense Embedding 模型）将 Query 和 Document **分别**编码为向量，再算相似度。可以预先离线计算 Document 向量，查询时只需对比一次，效率高，适合大规模召回。Cross-Encoder 将 Query 和 Document **拼接**后一起输入模型，能捕捉 Query-Document 的交互特征，精度更高，但必须对每对 (Query, Chunk) 实时推理，复杂度 O(n)，不适合大规模召回，只适合对小候选集（10-30 条）精排。</span>
+> Hint：这段解释本身是通用知识，没有理论错误；冲突点在于它被表述成“本项目已实现的精排方案”，而当前系统真实落地的是 LLM Rerank，不是 Cross-Encoder。
+  - 修正子描述：在当前项目中，这道题更适合作为“延展设计题”而不是“实现题”；候选人应能说明 Cross-Encoder 的理论特点，同时明确本项目实际使用的是基于 LLM 的 reranker。
+
+**Q: 精排阶段你们用的什么模型？用 CPU 跑 Cross-Encoder 会有延迟问题吗？**  
+<span style="color:red">A: 支持 Sentence-Transformers 系列的 Cross-Encoder 模型（如 `cross-encoder/ms-marco-MiniLM-L-6-v2`）。CPU 环境下建议候选集 M ≤ 30，设置超时回退，超时后直接用 RRF 结果。</span>
+> Hint：当前仓库没有 Cross-Encoder provider、模型配置或依赖，这段答案与现有实现不一致。
+  - 修正子描述：当前精排阶段使用 `openai_compatible_llm` 对候选集做二次排序；若未配置 reranker 或调用失败，系统在 rerank 阶段告警后直接返回 RRF 结果，保证查询链路可用。
+
+---
+
+## 模块三：Ingestion Pipeline 数据摄取流水线
+
+### 九阶段流程
+```
+dedup → loader → asset_normalize → transform_pre → sectioner → chunker → transform_post → embedding → upsert
+```
+
+1. **Dedup**：先基于文件哈希与版本记录判断是否已处理，解决重复摄入与幂等入口问题。
+2. **Loader**：按文件类型选择 loader；PDF 场景优先走 PyMuPDF，失败时退到 `pypdf` 或原始文本提取，同时抽取资产引用。
+3. **Asset Normalize**：把图片等资产统一落到本地资产存储，建立 `ref_id → asset_id` 映射，避免后续链路直接依赖源文件路径。
+4. **Transform Pre**：对 Markdown/文本做前置规范化，保证后续 section/chunk 切分输入稳定。
+5. **Sectioner**：先按文档结构切成 section，并为每个 section 分配稳定 `section_id`，保留结构边界。
+6. **Chunker**：在 section 内做递归字符切分，生成 `chunk_index / section_path / asset_ids` 等元数据，并基于 `section_id + canonical_text_fingerprint` 生成稳定 `chunk_id`。
+7. **Transform Post**：通过通用 `Enricher` 机制补充检索增强信息，把 `chunk_retrieval_text`、`enrich_keys` 等写入 metadata，但**不直接改写** `chunk.text`。
+8. **Embedding**：按策略执行 dense / sparse / hybrid 编码；Dense 侧支持缓存，Sparse 侧直接产出供 FTS5 upsert 的文本。
+9. **Upsert**：把结果分别写入 `app.sqlite`、`fts.sqlite`、`chroma_lite.sqlite` 与本地 md/assets 目录，形成可查询、可回溯、可删除的多存储状态。
+
+### 幂等性设计
+- **chunk_id 生成**：chunker 先对 `chunk.text` 做 canonical 规范化，再计算文本指纹，并与 `section_id` 组合生成稳定 `chunk_id`；这样同一 section 下内容不变时可重复得到相同 ID，而内容变更或 section 边界变化时才会产生新的 chunk。
+- **为什么不用 UUID**：UUID 只能保证唯一，不能保证重复摄入时的可重算性；当前实现需要依赖稳定 `chunk_id` 做 upsert、覆盖写入和差量处理，因此必须使用确定性哈希。
+- **文件级去重**：在真正进入 loader/chunker 前，会先把文件 SHA256 落到 `app.sqlite` 的 `doc_versions.file_sha256` 上；如果发现同内容版本已存在，就可以直接跳过重复摄入，减少后续解析、切分和 embedding 成本。
+
+### 高频面试题
+
+**Q: 当前系统如何保证切分质量？为什么不用一个独立的 LLM `ChunkRefiner` 来做 Chunking 优化？**  
+A: 当前系统把“切分质量”和“检索增强”拆成了两个更可控的层次：
+   - **先保结构完整**：`sectioner` 先按 Markdown/页面结构切出 section，避免跨标题、跨页把不相关内容混在一起。
+   - **再做递归 chunking**：`chunker` 在 section 内按分隔符递归切分，并保留 `chunk_overlap`、`section_path`、`asset_ids` 等上下文，使 chunk 本身已经是较稳定的语义单元。
+   - **最后补检索信号**：如果还需要额外的检索增强，不是让 LLM 直接“重写 chunk”，而是在 `transform_post` 中由 `Enricher` 生成 retrieval-only 信息，写入 metadata 与 `chunk_retrieval_text`。
+   - **这样设计的原因**：相比一个黑盒式 `ChunkRefiner`，当前方案更确定、更便宜、更容易 trace 和复现，也更适合做幂等 upsert 与回归测试。
+
+**Q: 当前系统的 metadata enrichment 存在哪里？对检索有什么用？**  
+A: 真实实现里，“metadata enrichment” 依然存在，只是不再被硬编码成 `Title/Summary/Tags` 三元组：
+   - **存在哪里**：`transform_post` 会把 `Enricher` 的输出合并进 chunk metadata，同时生成 `chunk_retrieval_text` 与 `enrich_keys`；对于视觉增强类结果，还会把 sidecar 数据写入 `asset_enrichments` / `chunk_enrichments` 表。
+   - **对检索有什么用**：`chunk_retrieval_text` 会作为召回用文本，把原始 chunk 内容和增强信息拼成更适合检索的视图；而 metadata 中的字段则更适合做结果解释、调试、展示，以及后续基于 `filters` 的扩展过滤能力。
+   - **为什么不用固定三元组**：不同 provider 输出的信息粒度不同，当前设计选择“保留通用 enrichment 接口 + retrieval view 组装”，而不是强迫所有增强器都产出同一套 `Title/Summary/Tags` 字段。
+
+**Q: 图片检索是怎么实现的？用户怎么通过文字找到图片？**  
+A: 视觉增强结果会进入 metadata 与 `chunk_retrieval_text`，从而参与检索召回；查询结果先返回关联 `asset_id`，需要图片时再通过 `library_query_assets` 按资产 ID 读取文件并返回 Base64 数据。
+
+---
+
+## 模块四：可插拔架构
+
+### 核心设计
+- 6 大组件均有抽象 Base 类：`BaseLoader` / `BaseSplitter` / `BaseTransform` / `BaseEmbedding` / `BaseVectorStore` / `BaseReranker`
+- **工厂模式**：各组件通过 Factory 函数根据 YAML 配置实例化，调用方不直接 new 具体实现类
+- **配置驱动**：修改 `config/settings.yaml` 即可切换后端，零代码修改
+
+### 新增 Provider 流程（面试经典追问）
+1. 新建 `src/libs/{component}/your_provider.py`，继承对应 Base 类，实现接口方法
+2. 在对应 Factory 函数中注册新 provider 名称和类映射
+3. 在 `config/settings.yaml` 中配置 `provider: your_provider`
+4. 只需增量修改，不需要改已有代码
+
+### 当前支持
+- LLM：Azure OpenAI / OpenAI / Ollama / DeepSeek
+- Embedding：OpenAI / Azure / Ollama
+- Vector Store：Chroma（接口预留 Qdrant/Pinecone 替换）
+- <span style="color:red">Reranker：Cross-Encoder / LLM Rerank / None</span>
+> Hint：当前代码里没有 `Cross-Encoder` 的注册实现。
+  - 修正子描述：当前可用的精排能力是 `openai_compatible_llm` 与 `noop`；接口设计允许后续扩展更多 reranker provider，但当前仓库未落地 Cross-Encoder。
+
+---
+
+## 模块五：MCP 协议集成
+
+### 核心规范
+- **协议**：MCP（Model Context Protocol），基于 JSON-RPC 2.0
+- **传输层**：Stdio Transport（Client 以子进程方式启动 Server，双方通过 stdin/stdout 通信）
+- **为什么用 Stdio**：零网络依赖，无需端口/鉴权，天然适合私有知识库；stdout 只输出合法 MCP 消息，日志走 stderr
+
+### 暴露的 Tools
+| 工具名 | 功能 | 关键参数 |
+|--------|------|---------|
+| `library_query` | 主检索入口，执行 Hybrid Search + 可选 Rerank，返回回答与引用 | `query`, `top_k?`, `filters?`, `strategy_config_id?` |
+| `library_query_assets` | 按资产 ID 读取图片/附件内容，返回 Base64 数据 | `asset_ids`, `variant?`, `max_bytes?` |
+| `library_get_document` | 获取某个文档版本的规范化 Markdown 内容 | `doc_id`, `version_id`, `max_chars?` |
+| `library_list_documents` | 列出文档版本，支持分页与删除状态过滤 | `limit?`, `offset?`, `include_deleted?`, `doc_id?` |
+| `library_delete_document` | 删除整份文档或指定版本（当前 MCP 仅开放 soft delete） | `doc_id`, `version_id?`, `mode?`, `reason?`, `dry_run?` |
+| `library_ingest` | 摄入本地文档，创建或续接文档版本生命周期 | `file_path`, `policy?`, `strategy_config_id?` |
+| `library_ping` | 健康检查与连通性验证 | 无 |
+
+### Citation 设计
+每个检索结果携带结构化引用：来源文件名、页码、chunk 内容摘要，方便 Client 展示"回答依据"，增强用户对 AI 输出的信任。
+
+### 高频面试题
+
+**Q: MCP 和普通 REST API 有什么区别？**  
+A: MCP 是专为 AI Agent 设计的上下文协议，定义了标准的 `tools`/`resources`/`prompts` 接口，任何合规的 MCP Client（Copilot、Claude Desktop 等）都能即插即用，无需定制集成。REST API 需要客户端专门适配，MCP 通过协议标准化消除了这一成本。
+
+**Q: Stdio Transport 有什么局限性？什么情况下需要换 HTTP Transport？**  
+A: Stdio 适合本地单进程场景。局限：不支持远程调用（Client 和 Server 必须在同一机器），不支持多 Client 并发连接。如需远程访问、多用户并发或负载均衡，需切换到 HTTP+SSE Transport。
+
+---
+
+## 模块六：文档生命周期管理
+
+### 生命周期相关 MCP Tools
+- `library_ingest`：负责把本地 `pdf/md` 文档纳入系统生命周期，完成从“原始文件”到“可检索文档版本”的创建。
+  - **功能**：校验 `file_path / policy / strategy_config_id`，执行 dedup → chunk → embed → upsert 全链路。
+  - **实现方案**：MCP 层先通过 `normalize_ingest_input` 规范参数，再调用 `IngestRunner.run(...)`；其中 `policy` 控制遇到重复文件时是跳过、创建新版本还是继续。
+  - **主要函数**：`src/mcp_server/mcp/tools/ingest.py` 中的 `normalize_ingest_input`、`make_tool`，以及 `src/core/runners/ingest.py` 中的 `IngestRunner.run`。
+
+- `library_list_documents`：负责列出当前已进入生命周期管理的文档版本，属于管理侧“盘点/分页浏览”入口。
+  - **功能**：支持 `limit / offset / include_deleted / doc_id`，返回文档版本列表，而不是旧设计里的 collection 视图。
+  - **实现方案**：MCP 层完成分页参数校验后，直接读取 `app.sqlite`，通过 `SqliteStore.list_doc_versions(...)` 返回结构化版本列表。
+  - **主要函数**：`src/mcp_server/mcp/tools/list_documents.py` 中的 `make_tool`，以及 `src/ingestion/stages/storage/sqlite.py` 中的 `list_doc_versions`。
+
+- `library_get_document`：负责读取某个文档版本的规范化内容，属于生命周期中的“查看事实层内容”入口。
+  - **功能**：按 `doc_id + version_id` 读取对应版本的 `md_norm.md`，支持 `max_chars` 截断，便于管理端查看当前版本实际入库内容。
+  - **实现方案**：先通过 `_resolve_md_norm_path(...)` 定位到规范化 Markdown 文件，再通过 `_read_text_limited(...)` 控制读取长度；如果目标版本不存在，则直接返回参数错误。
+  - **主要函数**：`src/mcp_server/mcp/tools/get_document.py` 中的 `_resolve_md_norm_path`、`_read_text_limited`、`make_tool`。
+
+- `library_delete_document`：负责把文档或某个文档版本从生命周期中移除，是管理侧删除入口。
+  - **功能**：支持按 `doc_id` 删除整份文档，或按 `doc_id + version_id` 删除指定版本；支持 `mode` 与 `dry_run`，但当前 MCP 仅开放 `soft delete`。
+  - **实现方案**：MCP 层先校验 `doc_id / version_id / mode / dry_run`，再调用 `AdminRunner.delete_document(...)`。`soft delete` 通过 `SqliteStore.mark_deleted(...)` 修改 `doc_versions.status`；底层代码仍具备 hard delete 分支，可协调 `app.sqlite`、`fts.sqlite`、`chroma_lite.sqlite` 与本地文件系统删除，但 MCP 默认不开放。
+  - **主要函数**：`src/mcp_server/mcp/tools/delete_document.py` 中的 `make_tool`，`src/core/runners/admin.py` 中的 `AdminRunner.delete_document`，以及 `src/ingestion/stages/storage/sqlite.py` 中的 `mark_deleted`、`preview_delete` 等删除辅助函数。
+
+### 设计要点
+- 系统里没有单独命名为 `DocumentManager` 的实体，文档生命周期管理是通过一组 MCP admin tools + runner/store 协作完成的。
+- 生命周期主线是：`ingest` 创建版本 → `list/get` 查看版本状态与内容 → `delete` 标记删除或物理删除版本。
+- 删除之所以不是“只改一张表”，是因为文档版本同时影响主数据库、稀疏索引、向量索引以及本地 md/raw/assets 文件；即使当前 MCP 只开放 soft delete，底层实现仍然按跨存储一致性设计。
+
+### 高频面试题
+
+**Q: 为什么文档删除不能只删数据库里的一条记录？当前系统是怎么处理生命周期一致性的？**  
+A: 因为一个文档版本在系统里同时对应多层状态：`app.sqlite` 里有版本与 chunk 元数据，`fts.sqlite` 里有 sparse 检索文本，`chroma_lite.sqlite` 里有向量表示，本地文件系统里还有原始文件、规范化 Markdown 和资产文件。如果只删其中一层，就会出现“列表里看不到但还能被召回”或“索引删了但原始文件还在”的不一致。当前 MCP 层默认走 soft delete，只把 `doc_versions.status` 标成 deleted，降低误删风险；底层 `AdminRunner.delete_document(...)` 则保留 hard delete 协调逻辑，用于需要彻底清理多存储状态的场景。
+
+---
+
+## 模块七：可观测性与追踪系统
+
+### Trace 体系
+- **双链路**：
+  - **Ingestion Trace**：按真实 pipeline stage 记录 `dedup → loader → asset_normalize → transform_pre → sectioner → chunker → transform_post → embedding → upsert`。
+  - **Query Trace**：按在线查询阶段记录 `query_norm → retrieve_dense → retrieve_sparse → fusion → rerank → context_build → generate → format_response`。
+- **存储**：trace envelope 默认可落到 `logs/traces.jsonl`，也支持写入 `data/sqlite/traces.sqlite`，便于后续列表查询、按 `trace_id` 回放和 Dashboard/API 消费。
+- **TraceContext**：显式上下文模式，负责管理 `trace_id / trace_type / strategy_config_id`、span 栈、trace 级事件、`providers_snapshot` 和 `replay_keys`；各阶段通过 `obs.with_stage(...)` 生成 `stage.start / stage.end / stage.error` 事件，查询链路还会额外记录候选预览、融合结果和 `ranked_chunk_ids` 等回放信息。
+
+### <span style="color:red">Dashboard 6个页面</span>
+<span style="color:red">1. **系统总览**：当前组件配置 + Collection 统计</span>
+<span style="color:red">2. **数据浏览器**：文档/Chunk/图片详情查看</span>
+<span style="color:red">3. **Ingestion 管理**：文件上传、实时进度、文档删除</span>
+<span style="color:red">4. **Ingestion 追踪**：阶段耗时瀑布图</span>
+<span style="color:red">5. **Query 追踪**：Dense/Sparse 召回对比、Rerank 前后排名变化</span>
+<span style="color:red">6. **评估面板**：Ragas 指标、历史趋势</span>
+
+### 动态渲染设计
+<span style="color:red">Dashboard 基于 Trace 中的 `method`/`provider` 字段**动态渲染**，更换可插拔组件后 Dashboard 自动适配，无需修改代码。</span>
+
+---
+
+## 模块八：评估体系
+
+### 指标体系
+- **Hit Rate@K**：Top-K 结果中至少有一条命中 Golden Answer 的比例
+- **MRR（Mean Reciprocal Rank）**：第一条命中结果的排名倒数均值，衡量头部排序质量
+- **Ragas 指标集**：Faithfulness（回答是否基于检索内容）、Answer Relevancy（回答与问题相关性）、Context Precision（检索结果精准度）
+- **可插拔**：CompositeEvaluator 支持多评估器并行执行，Ragas / 自定义指标均可挂载
+
+### Golden Test Set
+当前项目中的 golden set / eval dataset 主要保存在 `tests/datasets/rag_eval_small.yaml` 与 `tests/datasets/retrieval_small.yaml`，由集成测试和 `EvalRunner` 共同读取，用于回归比较检索与回答质量。
+
+设计原则：
+- **小而稳定**：数据集规模不追求大，而是优先覆盖关键能力点，保证每次策略调整后都能快速回归。
+- **问题与预期显式配对**：每条 case 都有稳定的 `case_id`、查询文本，以及 `expected keywords` 或 `expected_terms` 这类可检查预期，便于做自动化评分。
+- **检索与生成分层**：`retrieval_small.yaml` 更偏向“构造最小语料 + 验证召回是否命中”，`rag_eval_small.yaml` 更偏向“给定真实查询 case，验证最终检索/回答结果是否满足预期关键词”。
+- **围绕核心机制选题**：当前样本集中覆盖了 embedding cache、SQLite FTS5 / BM25、RRF fusion 等核心实现点，目的是让回归数据直接对齐系统真实设计，而不是做泛化问答题库。
+
+保存与读取方式：
+- `tests/datasets/retrieval_small.yaml`：保存最小检索语料 `docs` 与查询 `queries`，主要用于集成测试先摄入样本文档，再验证检索链路。
+- `tests/datasets/rag_eval_small.yaml`：保存 `dataset_id / version / cases`，每个 case 带 `case_id`、`query`、`tags` 和 `expected.keywords`，供 `EvalRunner` 按 dataset_id 加载并逐条执行评估。
+- `EvalRunner` 会根据 `dataset_id` 解析到 `tests/datasets/<dataset_id>.yaml`（或 `.json`），逐条运行查询，并把结果持久化到 `app.sqlite` 的 `eval_runs` 与 `eval_case_results`。
+
+---
+
+## 模块九：工程化实践
+
+### 测试体系
+- **分层金字塔**：Unit（单元）→ Integration（集成）→ E2E（端到端）
+- **单元测试 mock 策略**：用 `unittest.mock.patch` mock LLM 客户端，返回预设响应，避免实际 API 调用；测试关注业务逻辑而非外部依赖
+- <span style="color:red">**测试覆盖**：1198+ 单元测试 + 30 E2E 全绿</span>
+- <span style="color:red">**E2E 测试**：`tests/e2e/test_mcp_client.py` 启动真实 MCP Server 子进程，发送 JSON-RPC 消息端到端验证</span>
+> Hint：当前仓库中的 E2E 文件结构已经变化，`tests/e2e/test_mcp_client.py` 不存在；“1198+ / 30 E2E”也不是当前源码里可直接佐证的稳定事实。
+  - 修正子描述：当前 E2E 主要包括 `tests/e2e/test_mcp_stdio.py`、`tests/e2e/test_dashboard_real_data.py`、`tests/e2e/test_dashboard_smoke.py`，其中 MCP 场景通过真实 stdio server 进程做端到端验证。
+
+### 持久化存储架构
+| 存储 | 文件 | 用途 |
+|------|------|------|
+| `app.sqlite` | `data/sqlite/app.sqlite` | 主数据、文档版本、chunk/asset 元数据、文件哈希去重记录、评估结果 |
+| `fts.sqlite` | `data/sqlite/fts.sqlite` | 稀疏检索文本与 FTS5/BM25 查询 |
+| `chroma_lite.sqlite` | `data/chroma/chroma_lite.sqlite` | Dense 向量数据与对应 metadata |
+| `raw / md / assets` | `data/raw` / `data/md` / `data/assets` | 原始文件、规范化 Markdown、资产文件本体 |
+
+**设计原则**：Local-First，零外部数据库依赖，`pip install` 即可运行。
+
+---
+
+## 常见"露馅"警示点
+
+面试中如候选人无法解释以下细节，需在报告中标记：
+
+| 简历描述 | 深挖问题 | 露馅信号 |
+|---------|---------|---------|
+| "混合检索命中率提升 XX%" | 怎么测的？用什么指标？ | 说不清 Hit Rate@K 定义或无测试数据 |
+| "RRF 融合算法" | 公式是什么？k 值怎么设的？ | 无法说出公式，或说成线性加权 |
+| "设计可插拔架构" | 新增 Provider 要改哪些文件？ | 不知道抽象接口在哪定义 |
+| "幂等 Upsert" | chunk_id 怎么生成的？ | 说是 UUID，或说不清楚 |
+| "MCP 协议实现" | Stdio Transport 是怎么工作的？ | 不知道 stdout/stderr 分工 |
+| "TDD 开发，1200+ 测试" | 单元测试怎么 mock LLM？ | 不知道 mock 策略 |
+| "多模态检索" | Caption 文本怎么参与检索？ | 说不清与正文的关系 |
+| "跨存储协调删除" | 删一个文档要操作几个存储？ | 只说 Chroma 或说不知道 |

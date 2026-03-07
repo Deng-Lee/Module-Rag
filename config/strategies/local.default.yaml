@@ -15,18 +15,19 @@ providers:
   embedder:
     provider_id: openai_compatible
     params:
-      endpoint_key: openai
-      model: text-embedding-3-large
+      endpoint_key: qwen
+      model: text-embedding-v3
+      batch_size: 10
   llm:
     provider_id: openai_compatible
     params:
-      endpoint_key: openai
-      model: gpt-4o-mini
+      endpoint_key: qwen
+      model: qwen-turbo
   judge:
     provider_id: openai_compatible
     params:
-      endpoint_key: openai
-      model: gpt-4o-mini
+      endpoint_key: qwen
+      model: qwen-turbo
   vector_index:
     provider_id: vector.chroma
   retriever:

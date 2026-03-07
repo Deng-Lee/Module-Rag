@@ -1,0 +1,19 @@
+paths:
+  data_dir: data/resume_bench_20260307_v3
+  raw_dir: data/resume_bench_20260307_v3/raw
+  md_dir: data/resume_bench_20260307_v3/md
+  assets_dir: data/resume_bench_20260307_v3/assets
+  chroma_dir: data/resume_bench_20260307_v3/chroma
+  sqlite_dir: data/resume_bench_20260307_v3/sqlite
+  cache_dir: cache/resume_bench_20260307_v3
+  logs_dir: logs/resume_bench_20260307_v3
+
+server:
+  dashboard_host: 127.0.0.1
+  dashboard_port: 7860
+
+defaults:
+  strategy_config_id: local.test
+
+eval:
+  datasets_dir: tests/datasets

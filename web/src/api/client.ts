@@ -18,6 +18,12 @@ export const api = {
   documents: (params = "") => http<{ items: any[] }>(`/documents${params}`),
   chunk: (id: string) => http<any>(`/chunk/${id}`),
   ingest: (payload: any) => http<any>("/ingest", { method: "POST", body: JSON.stringify(payload) }),
+  query: (payload: any) => http<any>("/query", { method: "POST", body: JSON.stringify(payload) }),
   del: (payload: any) => http<any>("/delete", { method: "POST", body: JSON.stringify(payload) }),
-  evalRuns: () => http<{ items: any[] }>("/eval/runs"),
+  evalRun: (payload: any) => http<any>("/eval/run", { method: "POST", body: JSON.stringify(payload) }),
+  evalRuns: (params = "") => http<{ items: any[]; limit: number; offset: number }>(`/eval/runs${params}`),
+  evalTrends: (metric = "hit_rate@k", window = 30) =>
+    http<{ metric: string; window: number; points: any[] }>(
+      `/eval/trends?metric=${encodeURIComponent(metric)}&window=${window}`
+    ),
 };

@@ -9,7 +9,7 @@ import json
 
 from ..eval import CompositeEvaluator, GenerationMetricSet, MetricSet, load_dataset
 from ..response import ResponseIR
-from ..strategy import load_settings, merge_provider_overrides
+from ..strategy import Settings, load_settings, merge_provider_overrides
 from .query import QueryRunner
 from ...ingestion.stages.storage.sqlite import SqliteStore
 from ...libs.factories.common import NoopProvider
@@ -39,6 +39,7 @@ class EvalRunResult:
 @dataclass
 class EvalRunner:
     settings_path: str | Path = "config/settings.yaml"
+    settings: Settings | None = None
 
     def run(
         self,
@@ -48,7 +49,7 @@ class EvalRunner:
         top_k: int = 5,
         judge_strategy_id: str | None = None,
     ) -> EvalRunResult:
-        settings = load_settings(self.settings_path)
+        settings = self.settings or load_settings(self.settings_path)
         dataset_path = _resolve_dataset_path(dataset_id, settings)
         dataset = load_dataset(dataset_path)
 
@@ -89,7 +90,7 @@ class EvalRunner:
         cases_out: list[EvalCaseRun] = []
         aggregates: dict[str, list[float]] = {}
 
-        runner = QueryRunner(settings_path=self.settings_path)
+        runner = QueryRunner(settings_path=self.settings_path, settings=settings)
         for case in dataset.iter_cases():
             resp = runner.run(case.query, strategy_config_id=strategy_config_id, top_k=top_k)
             run_output = _response_to_run_output(resp, sqlite, top_k=top_k)

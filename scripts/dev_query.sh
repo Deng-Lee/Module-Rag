@@ -15,16 +15,24 @@ fi
 
 PYTHONPATH=. .venv/bin/python - "$QUERY" "$STRATEGY_ID" "$TOP_K" <<'PY'
 import json
+import os
 import sys
+from src.core.strategy import load_settings
+from src.observability.sinks.jsonl import JsonlSink
+from src.observability.obs import set_sink
 
 from src.core.runners.query import QueryRunner
 
 query = sys.argv[1]
 strategy_id = sys.argv[2]
-top_k = int(sys.argv[3])
+limit = int(sys.argv[3])
 
-runner = QueryRunner()
-resp = runner.run(query, strategy_config_id=strategy_id, top_k=top_k)
+settings_path = os.environ.get("MODULE_RAG_SETTINGS_PATH", "config/settings.yaml")
+runner = QueryRunner(settings_path=settings_path)
+settings = load_settings(settings_path)
+set_sink(JsonlSink(settings.paths.logs_dir))
+
+resp = runner.run(query, strategy_config_id=strategy_id, limit=limit)
 print(resp.content_md)
 print(json.dumps(resp.structured, ensure_ascii=False, indent=2))
 print(f"trace_id: {resp.trace_id}")

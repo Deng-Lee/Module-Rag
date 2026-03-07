@@ -17,11 +17,16 @@ venv/
 # os/editor
 .DS_Store
 
+# frontend deps
+web/node_modules/
+
 # local notes (do not commit)
 interview.md
 INTERVIEW.md
+QA_TEST_PROGRESS.md
 
 # local/private config (do not commit)
 config/local.override.yaml
 config/secrets.yaml
 config/model_endpoints.local.yaml
+config/settings.qa.*.yaml

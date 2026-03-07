@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from src.ingestion.stages import NoopEnricher, RetrievalViewConfig, TransformPostStage, build_chunk_retrieval_text
+from src.ingestion.stages import RetrievalViewConfig, TransformPostStage, build_chunk_retrieval_text
+from src.libs.providers.enricher.noop import NoopEnricher
 from src.libs.interfaces.splitter import ChunkIR
 
 
