@@ -14,7 +14,8 @@ from ...interfaces.vector_store.retriever import RankedCandidate
 class OpenAICompatibleLLMReranker:
     """LLM-based reranker via OpenAI-compatible chat completions.
 
-    Expects `RankedCandidate.metadata["chunk_text"]` to be populated.
+    Expects `RankedCandidate.metadata["rerank_text"]` (preferred) or
+    `RankedCandidate.metadata["chunk_text"]` (fallback) to be populated.
     """
 
     base_url: str
@@ -31,11 +32,7 @@ class OpenAICompatibleLLMReranker:
         top = list(candidates[: max(0, int(self.max_candidates))])
         payload_items: list[dict[str, Any]] = []
         for c in top:
-            text = ""
-            if isinstance(c.metadata, dict):
-                t = c.metadata.get("chunk_text")
-                if isinstance(t, str):
-                    text = t
+            text = _candidate_text(c)
             text = _truncate(text, int(self.max_chunk_chars))
             payload_items.append({"chunk_id": c.chunk_id, "text": text})
 
@@ -148,3 +145,14 @@ def _extract_json(text: str) -> str:
         return m.group(0)
     return text
 
+
+def _candidate_text(rc: RankedCandidate) -> str:
+    if not isinstance(rc.metadata, dict):
+        return ""
+    t = rc.metadata.get("rerank_text")
+    if isinstance(t, str) and t.strip():
+        return t
+    t = rc.metadata.get("chunk_text")
+    if isinstance(t, str):
+        return t
+    return ""

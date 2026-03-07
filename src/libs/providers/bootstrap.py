@@ -12,6 +12,7 @@ from .llm.openai_compatible import OpenAICompatibleLLM
 from .llm.azure_openai import AzureOpenAILLM
 from .reranker.noop import NoopReranker
 from .reranker.openai_compatible_llm import OpenAICompatibleLLMReranker
+from .reranker.cross_encoder import CrossEncoderReranker
 from .enricher.noop import NoopEnricher
 from .enricher.openai_compatible_vision import OpenAICompatibleVisionEnricher
 from .splitter.markdown_headings import MarkdownHeadingsSectioner
@@ -63,6 +64,9 @@ def register_builtin_providers(registry: ProviderRegistry) -> None:
     # Back-compat alias (do not use in new configs).
     registry.register("reranker", "reranker.noop", NoopReranker)
     registry.register("reranker", "openai_compatible_llm", OpenAICompatibleLLMReranker)
+    registry.register("reranker", "cross_encoder", CrossEncoderReranker)
+    # Back-compat alias for explicit namespacing in some strategy files.
+    registry.register("reranker", "reranker.cross_encoder", CrossEncoderReranker)
     registry.register("judge", "fake", FakeJudge)
     registry.register("judge", "openai_compatible", OpenAICompatibleJudge)
     registry.register("judge", "openai", OpenAICompatibleJudge)

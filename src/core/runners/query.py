@@ -18,6 +18,16 @@ RuntimeBuilder = Callable[[str], QueryRuntime]
 
 
 @dataclass
+class _InitErrorReranker:
+    provider_id: str
+    err_message: str
+
+    def rerank(self, query: str, candidates: list) -> list:
+        _ = query, candidates
+        raise RuntimeError(f"reranker_init_failed:{self.provider_id}:{self.err_message}")
+
+
+@dataclass
 class QueryRunner:
     """User-facing query entry for core (MCP tool will call this).
 
@@ -130,7 +140,11 @@ def _build_query_runtime_from_settings(strategy_config_id: str, *, settings: Set
     try:
         reranker_provider_id, reranker_params = strategy.resolve_provider("reranker")
         if reranker_provider_id not in {"noop", "reranker.noop"}:
-            reranker = registry.create("reranker", reranker_provider_id, **(reranker_params or {}))
+            try:
+                reranker = registry.create("reranker", reranker_provider_id, **(reranker_params or {}))
+            except Exception as e:
+                # Keep rerank stage observable: fallback warning should be emitted in stage.rerank.
+                reranker = _InitErrorReranker(provider_id=reranker_provider_id, err_message=str(e))
         else:
             reranker = None
     except Exception:

@@ -1356,6 +1356,57 @@ def _exec_case(case: Case, env: ProfileEnv, *, shared: dict[str, Any]) -> StepRe
                 except Exception:
                     pass
 
+    # --- L: reranker mode ---
+    if c == "L-04":
+        # Real cross-encoder inference (non-mock) smoke.
+        env.activate()
+        try:
+            from src.libs.interfaces.vector_store import RankedCandidate
+            from src.libs.providers.reranker.cross_encoder import CrossEncoderReranker
+
+            rr = CrossEncoderReranker(
+                model_name=os.environ.get("MODULE_RAG_CE_MODEL_NAME", "cross-encoder/ms-marco-MiniLM-L-6-v2"),
+                device=os.environ.get("MODULE_RAG_CE_DEVICE", "cpu"),
+                max_candidates=2,
+                batch_size=2,
+                max_length=256,
+                score_activation="raw",
+            )
+            candidates = [
+                RankedCandidate(
+                    chunk_id="relevant",
+                    score=0.5,
+                    rank=1,
+                    source="rrf",
+                    metadata={"rerank_text": "Paris is the capital of France."},
+                ),
+                RankedCandidate(
+                    chunk_id="irrelevant",
+                    score=0.5,
+                    rank=2,
+                    source="rrf",
+                    metadata={"rerank_text": "Bananas are yellow fruits rich in potassium."},
+                ),
+            ]
+            out = rr.rerank("What is the capital of France?", candidates)
+            if not out or out[0].chunk_id != "relevant":
+                return _fail("cross_encoder_bad_order")
+            return _pass()
+        except Exception as e:
+            m = str(e).lower()
+            if (
+                "cross_encoder dependency missing" in m
+                or "no module named 'sentence_transformers'" in m
+                or "httpsconnectionpool" in m
+                or "connection error" in m
+                or "timed out" in m
+                or "name or service not known" in m
+                or "temporary failure in name resolution" in m
+                or "ssl" in m
+            ):
+                return _blocked("cross_encoder:env_unready")
+            return _fail(f"cross_encoder_integration_failed:{type(e).__name__}:{e}")
+
     # --- K/L: provider switch / reranker ---
     if c.startswith("K-") or c.startswith("L-"):
         return _blocked("provider_switch:not_automated")

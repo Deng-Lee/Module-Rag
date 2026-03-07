@@ -17,6 +17,7 @@ class ChunkRow:
     section_path: str
     chunk_index: int
     chunk_text: str
+    chunk_retrieval_text: str | None = None
 
 
 @dataclass
@@ -94,10 +95,16 @@ class SqliteStore:
                     section_path TEXT,
                     chunk_index INTEGER,
                     chunk_text TEXT,
+                    chunk_retrieval_text TEXT,
                     created_at REAL
                 )
                 """
             )
+            try:
+                conn.execute("ALTER TABLE chunks ADD COLUMN chunk_retrieval_text TEXT")
+            except sqlite3.OperationalError:
+                # Existing DBs may already contain this column.
+                pass
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS chunk_assets (
@@ -380,15 +387,38 @@ class SqliteStore:
                 (ref_id, asset_id, doc_id, version_id, source_type, origin_ref, anchor_json, ts),
             )
 
-    def upsert_chunk(self, *, chunk_id: str, doc_id: str, version_id: str, section_id: str, section_path: str, chunk_index: int, chunk_text: str) -> None:
+    def upsert_chunk(
+        self,
+        *,
+        chunk_id: str,
+        doc_id: str,
+        version_id: str,
+        section_id: str,
+        section_path: str,
+        chunk_index: int,
+        chunk_text: str,
+        chunk_retrieval_text: str | None = None,
+    ) -> None:
         ts = time.time()
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT OR REPLACE INTO chunks(chunk_id, doc_id, version_id, section_id, section_path, chunk_index, chunk_text, created_at)
-                VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT OR REPLACE INTO chunks(
+                    chunk_id, doc_id, version_id, section_id, section_path, chunk_index, chunk_text, chunk_retrieval_text, created_at
+                )
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (chunk_id, doc_id, version_id, section_id, section_path, chunk_index, chunk_text, ts),
+                (
+                    chunk_id,
+                    doc_id,
+                    version_id,
+                    section_id,
+                    section_path,
+                    chunk_index,
+                    chunk_text,
+                    chunk_retrieval_text,
+                    ts,
+                ),
             )
 
     def upsert_chunk_asset(self, *, chunk_id: str, asset_id: str) -> None:
@@ -592,7 +622,7 @@ class SqliteStore:
             return []
         placeholders = ",".join(["?"] * len(chunk_ids))
         sql = f"""
-            SELECT chunk_id, doc_id, version_id, section_id, section_path, chunk_index, chunk_text
+            SELECT chunk_id, doc_id, version_id, section_id, section_path, chunk_index, chunk_text, chunk_retrieval_text
             FROM chunks
             WHERE chunk_id IN ({placeholders})
         """
@@ -610,6 +640,11 @@ class SqliteStore:
                     section_path=str(r["section_path"] or ""),
                     chunk_index=int(r["chunk_index"] or 0),
                     chunk_text=str(r["chunk_text"] or ""),
+                    chunk_retrieval_text=(
+                        str(r["chunk_retrieval_text"])
+                        if r["chunk_retrieval_text"] is not None
+                        else None
+                    ),
                 )
             )
         return out

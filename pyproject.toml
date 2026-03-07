@@ -25,6 +25,10 @@ dev = [
   "mypy>=1.10",
   "types-PyYAML>=6.0",
 ]
+cross_encoder = [
+  "sentence-transformers>=3.0",
+  "torch>=2.2",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

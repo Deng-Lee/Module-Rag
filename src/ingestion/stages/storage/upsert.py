@@ -87,6 +87,11 @@ class UpsertStage:
                 section_path=c.section_path,
                 chunk_index=chunk_index,
                 chunk_text=c.text,
+                chunk_retrieval_text=(
+                    c.metadata.get("chunk_retrieval_text")
+                    if isinstance(c.metadata.get("chunk_retrieval_text"), str)
+                    else None
+                ),
             )
             chunks_written += 1
 

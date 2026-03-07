@@ -60,3 +60,21 @@ def test_chunk_enrichment_upsert_and_fetch(tmp_path: Path) -> None:
     assert item["model"] == "gpt-4o-mini"
     assert item["profile_id"] == "p1"
     assert item["retrieval_template_id"] == "facts_plus_enrich"
+
+
+def test_chunk_retrieval_text_persist_and_fetch(tmp_path: Path) -> None:
+    store = SqliteStore(db_path=tmp_path / "app.sqlite")
+    store.upsert_chunk(
+        chunk_id="c1",
+        doc_id="d1",
+        version_id="v1",
+        section_id="s1",
+        section_path="Intro",
+        chunk_index=1,
+        chunk_text="facts",
+        chunk_retrieval_text="facts\n\n[caption] image",
+    )
+    rows = store.fetch_chunks(["c1"])
+    assert rows and rows[0].chunk_id == "c1"
+    assert rows[0].chunk_text == "facts"
+    assert rows[0].chunk_retrieval_text == "facts\n\n[caption] image"

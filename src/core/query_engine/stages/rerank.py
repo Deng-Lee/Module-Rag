@@ -31,9 +31,14 @@ class RerankStage:
 
         try:
             # Attach chunk text/metadata for rerankers that need content (LLM / cross-encoder).
+            before_preview = [
+                {"chunk_id": r.chunk_id, "rank": int(getattr(r, "rank", 0) or 0), "score": float(r.score)}
+                for r in ranked[: min(10, len(ranked))]
+            ]
             chunk_ids = [r.chunk_id for r in ranked if r.chunk_id]
             rows = runtime.sqlite.fetch_chunks(chunk_ids)
             by_id = {r.chunk_id: r for r in rows}
+            used_retrieval_view = False
             for r in ranked:
                 row = by_id.get(r.chunk_id)
                 if row is None:
@@ -41,6 +46,10 @@ class RerankStage:
                 if not isinstance(r.metadata, dict):
                     r.metadata = {}
                 r.metadata.setdefault("chunk_text", row.chunk_text)
+                rerank_text = row.chunk_retrieval_text if row.chunk_retrieval_text else row.chunk_text
+                if row.chunk_retrieval_text:
+                    used_retrieval_view = True
+                r.metadata.setdefault("rerank_text", rerank_text)
                 r.metadata.setdefault("section_path", row.section_path)
                 r.metadata.setdefault("doc_id", row.doc_id)
                 r.metadata.setdefault("version_id", row.version_id)
@@ -51,7 +60,23 @@ class RerankStage:
             # Ensure ranks are sequential after rerank.
             for i, r in enumerate(out, start=1):
                 r.rank = i
-            obs.event("rerank.used", {"count_in": len(ranked), "count_out": len(out), "provider": type(runtime.reranker).__name__})
+            after_preview = [
+                {"chunk_id": r.chunk_id, "rank": int(getattr(r, "rank", 0) or 0), "score": float(r.score)}
+                for r in out[: min(10, len(out))]
+            ]
+            obs.event(
+                "rerank.ranked",
+                {"before": before_preview, "after": after_preview},
+            )
+            obs.event(
+                "rerank.used",
+                {
+                    "count_in": len(ranked),
+                    "count_out": len(out),
+                    "provider": type(runtime.reranker).__name__,
+                    "text_source": "retrieval_view" if used_retrieval_view else "facts",
+                },
+            )
             return out
         except Exception as e:
             obs.event(

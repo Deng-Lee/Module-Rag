@@ -31,6 +31,11 @@
 - [M. 配置变更与容错](#m-配置变更与容错)
 - [N. 数据生命周期闭环](#n-数据生命周期闭环)
 - [O. 文档替换与多场景验证](#o-文档替换与多场景验证)
+- [P. Trace 与回放稳定性](#p-trace-与回放稳定性)
+- [Q. 稳定性契约（canonical / chunk_id / asset_id）](#q-稳定性契约canonical--chunk_id--asset_id)
+- [R. MCP Tool 黑盒闭环](#r-mcp-tool-黑盒闭环)
+- [S. 评估数据集与质量门禁](#s-评估数据集与质量门禁)
+- [T. Golden / 回归基线](#t-golden--回归基线)
 
 ---
 
@@ -1396,6 +1401,26 @@ Setup（若当前为 S0_EMPTY）：
 1. query 仍成功返回（降级为 fusion 结果）。
 2. trace 记录 rerank_error。
 
+### L-04 OFFLINE：Cross-Encoder 真实推理（非 mock）
+
+Profiles：OFFLINE
+
+前置系统状态：无
+
+状态：OFFLINE=TODO，REAL=SKIP，Overall=TODO
+
+步骤：
+
+1. 使用 `cross_encoder` provider（例如 `cross-encoder/ms-marco-MiniLM-L-6-v2`）对固定 query 与两条候选执行 rerank。
+2. 断言 relevant passage 的排序高于无关 passage。
+3. 记录推理结果用于回放。
+
+预期：
+
+1. 用例必须经过真实模型推理，不允许 mock `predict`。
+2. 在相同输入下，结果稳定可复现（同分按原 rank 保序）。
+3. 若依赖缺失或模型不可用，返回可解释阻断信息。
+
 ---
 
 ## M. 配置变更与容错
@@ -1566,3 +1591,500 @@ Setup（若当前 < S2）：
 
 1. sources 可能来自多个 doc_id（若语料覆盖）。
 2. trace 能反映 dense/sparse/fusion 的候选来源分布。
+
+---
+
+## P. Trace 与回放稳定性
+
+启动方式（建议同时覆盖 API 与 CLI 触发）：
+
+- ingest：`bash scripts/dev_ingest.sh`
+- query：`bash scripts/dev_query.sh`
+- traces：`GET /api/traces`、`GET /api/traces/{trace_id}` 或等价 TestClient 调用
+
+### P-01 ingestion trace 的 stage 序列完整且顺序固定
+
+Profiles：OFFLINE/REAL
+
+前置系统状态：`S0_EMPTY` 即可
+
+状态：OFFLINE=TODO，REAL=TODO，Overall=TODO
+
+步骤：
+
+1. ingest `tests/fixtures/docs/sample.md`。
+2. 读取最新一条 ingestion trace。
+3. 提取 stages 顺序。
+
+预期：
+
+1. stage 顺序固定为 `dedup -> loader -> asset_normalize -> transform_pre -> sectioner -> chunker -> transform_post -> embedding -> upsert`。
+2. 每个 stage 都有 `status/start_ts/end_ts` 或等价耗时字段。
+3. 不允许缺 stage、重排 stage 或把多阶段合并成单个模糊节点。
+
+### P-02 query trace 的证据链完整
+
+Profiles：OFFLINE/REAL
+
+前置系统状态：至少 `S1_INGESTED_MIN`
+
+Setup（若当前为 S0_EMPTY）：
+
+1. ingest `tests/fixtures/docs/sample.md`
+
+状态：OFFLINE=TODO，REAL=TODO，Overall=TODO
+
+步骤：
+
+1. query 一个可命中的关键词。
+2. 读取对应 query trace。
+3. 检查 retrieval、fusion、rerank、response 相关字段。
+
+预期：
+
+1. trace 能看出 dense/sparse 候选、融合结果、rerank 前后差异（若启用 reranker）。
+2. 若当前配置为 `reranker=noop`，trace 也要明确反映“未做真实精排”。
+3. 结果中的 `trace_id` 能回查到完整明细。
+
+### P-03 相同 query 的 replay_keys 与策略快照稳定
+
+Profiles：OFFLINE
+
+前置系统状态：至少 `S1_INGESTED_MIN`
+
+Setup（若当前为 S0_EMPTY）：
+
+1. ingest `tests/fixtures/docs/sample.md`
+
+状态：OFFLINE=TODO，REAL=SKIP，Overall=TODO
+
+步骤：
+
+1. 在同一 `strategy_config_id` 下，对同一个 query 连续执行两次。
+2. 分别读取两条 query trace。
+3. 对比 `strategy_config_id/providers_snapshot/replay_keys` 等可回放字段。
+
+预期：
+
+1. 与策略相关的快照字段稳定一致。
+2. replay 所需关键字段齐全，不依赖临时内存状态。
+3. 同一配置下不应出现“第一条 trace 可解释、第二条 trace 缺字段”的漂移。
+
+### P-04 失败 trace 仍然可诊断
+
+Profiles：OFFLINE/REAL
+
+前置系统状态：无
+
+状态：OFFLINE=TODO，REAL=TODO，Overall=TODO
+
+步骤：
+
+1. 构造一个必然失败的请求（如缺失必填参数、provider_id 不存在、文件路径不存在）。
+2. 读取最近失败 trace 或 dashboard 错误返回。
+3. 检查错误字段与 stage 归属。
+
+预期：
+
+1. 失败不会吞掉 trace。
+2. 错误信息能定位到具体入口或 stage，而不是只有笼统 `500`。
+3. trace 中保留足够上下文，支持复盘失败原因。
+
+---
+
+## Q. 稳定性契约（canonical / chunk_id / asset_id）
+
+启动方式（建议优先 OFFLINE，便于重复比对）：
+
+- ingest：`bash scripts/dev_ingest.sh`
+- list/get：`library_list_documents`、`library_get_document`
+- sqlite 校验：必要时直接读取 `data/sqlite/*.sqlite`
+
+### Q-01 文本 canonical 规范化不影响幂等判断
+
+Profiles：OFFLINE
+
+前置系统状态：`S0_EMPTY` 即可
+
+状态：OFFLINE=TODO，REAL=SKIP，Overall=TODO
+
+步骤：
+
+1. 准备两份语义相同、仅空白/换行差异不同的 Markdown 文件。
+2. 分别 ingest。
+3. 比较去重、版本判定与 chunk 结果。
+
+预期：
+
+1. 规范化规则应避免无意义空白差异导致大面积重复 chunk。
+2. 真正内容不变时，系统要尽量复用既有结果或至少保持稳定切分。
+3. 若策略明确把这类差异视为新版本，trace 中也应可解释。
+
+### Q-02 chunk_id 对同内容稳定、对内容变化敏感
+
+Profiles：OFFLINE
+
+前置系统状态：`S0_EMPTY` 即可
+
+状态：OFFLINE=TODO，REAL=SKIP，Overall=TODO
+
+步骤：
+
+1. ingest 文档 A。
+2. 记录其 chunk_id 集合。
+3. 重新 ingest 完全相同内容的 A。
+4. 再 ingest 修改过局部内容的 A1。
+
+预期：
+
+1. 相同内容下 chunk_id 应稳定可重算。
+2. 局部内容变化应只影响相关 chunk，而不是整篇全部漂移。
+3. chunk_id 设计应服务于 upsert/回归，而不是每次重新随机生成。
+
+### Q-03 retrieval-only 增强不应污染原始正文层
+
+Profiles：OFFLINE/REAL
+
+前置系统状态：至少 `S1_INGESTED_MIN`
+
+Setup（若当前为 S0_EMPTY）：
+
+1. ingest `tests/fixtures/docs/with_images.pdf` 或任一含 enrichable 内容的文档
+
+状态：OFFLINE=TODO，REAL=TODO，Overall=TODO
+
+步骤：
+
+1. ingest 文档。
+2. 获取 chunk 详情或落库内容。
+3. 对比原始 `chunk_text` 与 retrieval 增强字段（如 `chunk_retrieval_text` 或等价字段）。
+
+预期：
+
+1. 原始正文层保持可追溯，不被后处理随意改写。
+2. 检索增强信息进入 metadata 或 retrieval-only 字段。
+3. 面向检索的增强与面向事实保真的正文层边界清晰。
+
+### Q-04 asset_id 在重复 ingest 下稳定复用
+
+Profiles：OFFLINE/REAL
+
+前置系统状态：至少 `S1_INGESTED_MIN`
+
+Setup（若当前为 S0_EMPTY）：
+
+1. ingest `tests/fixtures/docs/with_images.pdf`
+
+状态：OFFLINE=TODO，REAL=TODO，Overall=TODO
+
+步骤：
+
+1. ingest 含图片文档。
+2. 记录返回或落库中的 `asset_id`。
+3. 对同一文件重复 ingest。
+4. 再通过 query + `library_query_assets` 回查资产。
+
+预期：
+
+1. 相同资产不应无限生成新的 asset_id。
+2. query 命中的资产引用能被 `library_query_assets` 正常解析。
+3. 生命周期删除后，资产引用与文件系统状态保持一致。
+
+---
+
+## R. MCP Tool 黑盒闭环
+
+启动方式（只走 stdio / MCP 协议，不走内部 runner）：
+
+- `initialize`
+- `tools/list`
+- `tools/call`
+
+### R-01 ingest → query → get_document 黑盒闭环
+
+Profiles：OFFLINE/REAL
+
+前置系统状态：`S0_EMPTY` 即可
+
+状态：OFFLINE=TODO，REAL=TODO，Overall=TODO
+
+步骤：
+
+1. 通过 `library_ingest` 摄取 `sample.md`。
+2. 通过 `library_query` 命中该文档。
+3. 从 query 结果中拿到 `doc_id/version_id`。
+4. 调用 `library_get_document` 读取文档详情。
+
+预期：
+
+1. 三个 MCP tools 的字段契约能串起来，不需要调用方猜内部实现。
+2. `library_get_document` 返回的版本应与 query 命中的版本一致。
+3. 整个链路不依赖 dashboard 私有接口。
+
+### R-02 query_assets 能按 asset_id 返回可用内容
+
+Profiles：OFFLINE/REAL
+
+前置系统状态：至少 `S1_INGESTED_MIN`
+
+Setup（若当前为 S0_EMPTY）：
+
+1. ingest `tests/fixtures/docs/with_images.pdf`
+
+状态：OFFLINE=TODO，REAL=TODO，Overall=TODO
+
+步骤：
+
+1. query 一个会命中图片锚点的描述。
+2. 从结果中提取 `asset_id`。
+3. 调用 `library_query_assets`。
+
+预期：
+
+1. 返回内容包含 `bytes_b64` 或等价可消费字段。
+2. 不要求 query 直接内嵌图片本体；资产读取由独立 tool 完成。
+3. 非法 `asset_id` 需返回结构化错误。
+
+### R-03 list_documents / delete_document 生命周期闭环
+
+Profiles：OFFLINE/REAL
+
+前置系统状态：至少 `S1_INGESTED_MIN`
+
+Setup（若当前为 S0_EMPTY）：
+
+1. ingest `tests/fixtures/docs/sample.md`
+
+状态：OFFLINE=TODO，REAL=TODO，Overall=TODO
+
+步骤：
+
+1. `library_list_documents` 查看已有文档。
+2. `library_delete_document` 执行 soft delete。
+3. 再次 `library_list_documents`，分别测试 `include_deleted=false/true`。
+
+预期：
+
+1. 默认列表不返回 deleted 版本。
+2. `include_deleted=true` 可回看历史版本。
+3. query 结果不再命中已删除版本。
+
+### R-04 错误请求的协议返回稳定
+
+Profiles：OFFLINE/REAL
+
+前置系统状态：无
+
+状态：OFFLINE=TODO，REAL=TODO，Overall=TODO
+
+步骤：
+
+1. 对 `library_query` 传入非法参数类型。
+2. 对 `library_get_document` 缺失 `version_id`。
+3. 对不存在的 tool 发起调用。
+
+预期：
+
+1. 错误返回结构稳定，便于 MCP Client 统一处理。
+2. 参数错误、业务错误、未知工具错误三类口径清晰。
+3. 错误不应污染后续正常会话。
+
+---
+
+## S. 评估数据集与质量门禁
+
+启动方式：
+
+- `bash scripts/dev_eval.sh <dataset_id> <strategy_config_id> <top_k>`
+- dashboard `/api/eval/*`
+
+### S-01 retrieval_small 数据集契约完整
+
+Profiles：OFFLINE
+
+前置系统状态：无
+
+状态：OFFLINE=TODO，REAL=SKIP，Overall=TODO
+
+步骤：
+
+1. 读取 `tests/datasets/retrieval_small.yaml`。
+2. 校验 case 字段是否完整。
+3. 校验每条 case 是否能映射到明确预期文档或命中目标。
+
+预期：
+
+1. 数据集结构稳定，字段缺失会被明确报错。
+2. case 设计面向检索质量，而不是混杂生成结果判定。
+3. 数据集规模应小而稳定，适合本地频繁回归。
+
+### S-02 rag_eval_small 在最小语料上可复现
+
+Profiles：OFFLINE/REAL
+
+前置系统状态：至少 `S1_INGESTED_MIN`
+
+Setup（若当前为 S0_EMPTY）：
+
+1. 先 ingest 与 `rag_eval_small` 对应的最小语料
+
+状态：OFFLINE=TODO，REAL=TODO，Overall=TODO
+
+步骤：
+
+1. 运行 `rag_eval_small`。
+2. 记录评估输出与 trace。
+3. 再次运行同一 dataset 与同一 strategy。
+
+预期：
+
+1. OFFLINE 下结果波动应可控。
+2. REAL 下即使分数略有浮动，也不应出现结构性失败。
+3. 两次运行都能关联到完整 eval 记录。
+
+### S-03 EvalRunner 结果落库完整
+
+Profiles：OFFLINE/REAL
+
+前置系统状态：无
+
+状态：OFFLINE=TODO，REAL=TODO，Overall=TODO
+
+步骤：
+
+1. 运行任一 eval dataset。
+2. 查询 `eval_runs` 与 `eval_case_results`。
+3. 对照 dashboard `/api/eval/runs` 返回。
+
+预期：
+
+1. run 级、case 级结果都可追溯。
+2. 数据库存储与 API 返回一致。
+3. 失败 case 不会导致整次 run 静默丢失。
+
+### S-04 质量门禁失败时有明确结论
+
+Profiles：OFFLINE
+
+前置系统状态：至少 `S1_INGESTED_MIN`
+
+Setup：
+
+1. 准备一个刻意劣化的策略配置（如过低 top_k、关闭关键召回链路）
+
+状态：OFFLINE=TODO，REAL=SKIP，Overall=TODO
+
+步骤：
+
+1. 用正常策略跑一次 eval。
+2. 用劣化策略再跑一次。
+3. 对比关键指标、失败 case 与 traces。
+
+预期：
+
+1. 指标退化能被明确看出来，而不是只输出“跑完了”。
+2. 失败 case 可追溯到具体 query / trace。
+3. 这类测试能作为策略改动的质量门禁，而不是事后人工感觉。
+
+---
+
+## T. Golden / 回归基线
+
+启动方式（建议固定 data_dir + 固定 strategy_config_id）：
+
+- query：`bash scripts/dev_query.sh`
+- eval：`bash scripts/dev_eval.sh`
+- traces：dashboard API 或 sqlite 直读
+
+### T-01 query trace 关键字段 shape 不漂移
+
+Profiles：OFFLINE
+
+前置系统状态：至少 `S1_INGESTED_MIN`
+
+Setup（若当前为 S0_EMPTY）：
+
+1. ingest `tests/fixtures/docs/sample.md`
+
+状态：OFFLINE=TODO，REAL=SKIP，Overall=TODO
+
+步骤：
+
+1. 固定 query 与 strategy 跑一次。
+2. 保存/比对 trace 关键字段 shape。
+3. 与既有基线做回归比对。
+
+预期：
+
+1. stage 名称、关键证据字段、结果结构保持稳定。
+2. 若结构变更，必须是显式升级，而不是静默漂移。
+3. 这类用例可作为 dashboard / API / MCP 客户端兼容性保护。
+
+### T-02 ingestion trace 关键 stages 不缺失
+
+Profiles：OFFLINE
+
+前置系统状态：`S0_EMPTY` 即可
+
+状态：OFFLINE=TODO，REAL=SKIP，Overall=TODO
+
+步骤：
+
+1. 对固定文档执行 ingest。
+2. 比对 ingestion trace 的 stage 集合与基础统计。
+
+预期：
+
+1. `dedup/loader/sectioner/chunker/embedding/upsert` 等关键阶段始终存在。
+2. 阶段命名和职责变化需要同步更新基线，不允许悄悄改掉。
+3. 用例能快速发现 pipeline contract 漂移。
+
+### T-03 策略切换后的结果可比较
+
+Profiles：OFFLINE/REAL
+
+前置系统状态：至少 `S2_INGESTED_MULTI`
+
+Setup（若当前 < S2）：
+
+1. ingest `tests/fixtures/docs/sample.md`
+2. ingest `tests/fixtures/docs/complex_technical_doc.pdf`
+
+状态：OFFLINE=TODO，REAL=TODO，Overall=TODO
+
+步骤：
+
+1. 用 `reranker=noop` 跑固定 query。
+2. 用启用 reranker 的策略再跑一次。
+3. 比较 sources、排序、trace 证据。
+
+预期：
+
+1. 两种策略结果可比较，差异能通过 trace 解释。
+2. 若启用真实 reranker，不应破坏原有返回结构。
+3. 策略升级应体现在“可解释差异”，而不是“随机变化”。
+
+### T-04 文档替换后 retrieval baseline 不异常回退
+
+Profiles：OFFLINE/REAL
+
+前置系统状态：至少 `S2_INGESTED_MULTI`
+
+Setup（若当前 < S2）：
+
+1. ingest `tests/fixtures/docs/sample.md`
+2. ingest `tests/fixtures/docs/complex_technical_doc.pdf`
+
+状态：OFFLINE=TODO，REAL=TODO，Overall=TODO
+
+步骤：
+
+1. 记录一组固定 query 的 baseline 命中情况。
+2. 替换其中一份文档为新版本。
+3. 重新执行同一组 query。
+
+预期：
+
+1. 与未变更文档相关的 query 不应出现大面积意外回退。
+2. 与变更文档相关的差异应主要集中在受影响 query。
+3. 这类回归能提前发现 chunking/embedding/upsert 改动带来的副作用。

@@ -63,6 +63,7 @@ def test_register_builtin_providers() -> None:
     assert reg.has("vector_index", "vector.in_memory")
     assert reg.has("vector_index", "vector.chroma_lite")
     assert reg.has("reranker", "noop")
+    assert reg.has("reranker", "cross_encoder")
 
     assert isinstance(reg.create("embedder", "fake"), FakeEmbedder)
     assert isinstance(reg.create("embedder", "fake_alt"), FakeEmbedder)

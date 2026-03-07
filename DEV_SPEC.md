@@ -248,7 +248,7 @@ Upload
 
 * **原始文件（File）**：事实来源，仅作为解析输入保留。
 * **结构化 md（本地文件系统）**：解析事实层（Document Fact），由 Loader 产出，完整保留语义结构与上下文连续性，与切分和检索策略解耦，作为所有派生数据的 source of truth。
-* **SQLite（结构化索引层）**：运行索引层（Retrieval View），存储文档、版本、资产、锚点及 chunk 等元数据与清洗后的 chunk 文本，服务于高频查询与溯源展示，可随策略变化重建。
+* **SQLite（结构化索引层）**：运行索引层（Retrieval View），存储文档、版本、资产、锚点及 chunk 等元数据、facts 层 `chunk_text`，并可按策略补充 retrieval view 字段（如 `chunk_retrieval_text`），服务于高频查询与溯源展示，可随策略变化重建。
 * **Chroma（向量索引层）**：相似度检索专用，仅保存向量及最小必要元数据，可完全由 SQLite 重新生成。
 
 核心原则：**解析阶段产出的是事实，检索阶段维护的是视图；事实长期存在，视图可随策略演进而重建。**
@@ -1620,8 +1620,9 @@ Post-filter 行为：
 **输入：**
 
 * query
-* chunk_text
-* 可选增强字段（summary / keywords / image_caption）
+* facts 层 `chunk_text`
+* retrieval view `chunk_retrieval_text`（优先作为精排输入）
+* 可选增强字段（summary / keywords / image_caption / OCR）；若未落入 retrieval view，则作为 sidecar feature 参与构造
 
 **可插拔策略：**
 
@@ -1642,6 +1643,98 @@ Post-filter 行为：
 * 为生成阶段提供高质量上下文。
 
 所有重排策略必须版本化（`rerank_profile_id`），并纳入可观测指标（命中率变化、位置移动幅度等）。
+
+##### 3.2.6.1 Cross-Encoder 接入策略（Phase 1 / Phase 2）
+
+为保证接入过程与现有 QueryPipeline、trace、fallback 模型兼容，Cross-Encoder 精排按两个增量实施。
+
+**Phase 1：最小可运行版（先接 `chunk_text`）**
+
+目标：在不改离线 schema 的前提下，先把真实 Cross-Encoder provider 接入现有 rerank 扩展点。
+
+实现要求：
+
+1. **不改查询拓扑**
+   * 继续沿用 `query_norm → retrieve_dense / retrieve_sparse → fusion → rerank → context_build → generate / format_response`；
+   * Cross-Encoder 仅作为 `rerank` 阶段的新 provider，不引入新的查询分支。
+2. **复用现有回退**
+   * provider 超时、依赖缺失、模型加载失败、推理异常时，必须复用 3.2.8.4 的回退逻辑，直接退回 fusion 原始排序；
+   * 不允许因 Cross-Encoder 失败中断响应返回。
+3. **输入口径**
+   * `RerankStage` 从 SQLite 回读 `chunk_text`，为 Top-N fused candidates 构造 `(query, chunk_text)` pairs；
+   * `max_candidates`、`batch_size`、`max_length` 必须配置化；
+   * 同分时保留原始 rank 作为 tie-break，保证排序稳定可回放。
+4. **Provider 接入**
+   * 新增 `reranker.cross_encoder`；
+   * 文件：`src/libs/providers/reranker/cross_encoder.py`
+   * 类：`CrossEncoderReranker`
+   * 注册：`ProviderRegistry.register("reranker", "cross_encoder", CrossEncoderReranker)`
+5. **模型装载**
+   * 采用 lazy-load + 进程内缓存，避免每次 `QueryRunner.run()` 都重新加载 Cross-Encoder 权重；
+   * 缓存键建议至少包含 `(model_name, device, revision)`。
+6. **依赖管理**
+   * `sentence-transformers`、`torch` 等依赖以 optional extra 引入，不进入默认最小依赖；
+   * 若依赖不存在，provider 必须抛出可诊断异常，由 rerank fallback 吸收。
+
+Phase 1 的目标是先让系统拥有“真实 Cross-Encoder 精排能力 + 可配置 + 可回退 + 可观测”。
+
+**Phase 2：检索视图对齐版（切到 `chunk_retrieval_text`）**
+
+目标：让 Cross-Encoder 与 dense / sparse 一样，默认基于 retrieval view 做排序判断，从而真正消费 caption / OCR / keywords 等 retrieval-only 增强信号。
+
+实现要求：
+
+1. **持久化补齐**
+   * SQLite `chunks` 表新增 `chunk_retrieval_text` 列；
+   * `SqliteStore.upsert_chunk(...)` 增加 `chunk_retrieval_text` 写入；
+   * `SqliteStore.fetch_chunks(...)` 返回 `chunk_retrieval_text`，供 query/rerank/context 读侧复用。
+2. **离线写入对齐**
+   * `transform_post` 已负责生成 `chunk_retrieval_text`；
+   * Phase 2 要求在 upsert 阶段持久化该字段，而不是仅存在于内存中用于编码。
+3. **在线读侧对齐**
+   * `RerankStage` 优先把 `chunk_retrieval_text` 注入 candidate metadata（如 `rerank_text`），缺失时再回退到 `chunk_text`；
+   * `CrossEncoderReranker` 默认读取 `rerank_text`，实现“优先 retrieval view、兼容 facts”。
+4. **分层原则不变**
+   * `chunk_text` 继续作为 facts 层，服务于 citations / response；
+   * `chunk_retrieval_text` 仅用于检索/精排/诊断，默认不直接暴露给 client。
+5. **评估与回归**
+   * 需要新增 golden / eval case：facts 层不含关键词，但 OCR / caption / keywords 在 retrieval view 中存在；
+   * trace 中需显式记录本次 rerank 实际使用的文本来源（`retrieval_view` / `facts`）。
+
+**阶段边界**
+
+* Phase 1 解决“系统有没有 Cross-Encoder”
+* Phase 2 解决“Cross-Encoder 是否与本系统的 retrieval view 设计真正对齐”
+
+两个阶段都必须保持：
+
+* 失败自动回退到 fusion；
+* `strategy_config_id`、`providers_snapshot`、`rerank_profile_id` 继续进入 trace；
+* Response / citations 默认仍只展示 facts 层 `chunk_text`。
+
+##### 3.2.6.2 Cross-Encoder 配置契约（建议）
+
+```yaml
+providers:
+  reranker:
+    provider_id: cross_encoder
+    params:
+      model_name: BAAI/bge-reranker-v2-m3
+      device: cpu
+      max_candidates: 30
+      batch_size: 8
+      max_length: 512
+      score_activation: sigmoid
+```
+
+字段要求：
+
+* `model_name`：模型标识（必填）
+* `device`：`cpu/cuda/mps/auto`
+* `max_candidates`：限制参与精排的候选规模
+* `batch_size`：控制吞吐与显存占用
+* `max_length`：控制 pair tokenize 长度
+* `score_activation`：统一不同模型的输出口径（raw logit / sigmoid）
 
 ---
 
@@ -2191,6 +2284,12 @@ ResponseEnvelope<T> = {
 * 将配置序列化为 canonical JSON/YAML 后计算 `strategy_config_id = sha256(config)`；
 * A/B 测试的最小单元是 `strategy_config_id`（而不是代码分支），并要求每次执行记录该 id 以便回放与对比（对齐 3.4.1 准则 4）。
 
+Cross-Encoder 的配置必须遵循同一规则：
+
+* `model_name/device/max_candidates/batch_size/max_length/score_activation` 都属于 `strategy_config_id` 的组成部分；
+* 不允许通过“代码里写死模型名/设备”实现策略切换；
+* 若需要切换不同 Cross-Encoder 模型，必须体现为新的 strategy 配置，而不是隐藏在运行环境中。
+
 #### 3.4.4 必选阶段与可选能力（No-Op Provider 表达）
 
 为保持拓扑冻结（3.1 Rule2）并降低回放/对比成本，本系统不通过“插拔阶段顺序/删除阶段”实现可选能力；可选能力通过 **No-Op/Identity provider** 与配置开关表达。
@@ -2206,6 +2305,12 @@ ResponseEnvelope<T> = {
 * Sectioner：`sectioner.whole_doc`（整篇单 section）或 `sectioner.identity`（透传），而不是“跳过 Sectioner”；
 * Reranker：`reranker.noop`（保留原排序），并在结果中标记 `rerank_applied=false`；
 * Transformer(pre/post)：`transformer.noop_pre/noop_post`（透传），保持阶段观测点一致。
+
+对 Cross-Encoder 也适用同样规则：
+
+* 不启用真实精排时，必须显式选择 `reranker.noop`；
+* 启用真实精排时，显式选择 `reranker.cross_encoder` 或 `reranker.openai_compatible_llm`；
+* 禁止在 `RerankStage` 内部写条件分支“偷偷切模型”，避免策略不可追踪。
 
 通过该方式，策略切换始终体现为“provider 选择”，从而支持低成本 A/B、统一观测与可回放复现。
 
@@ -4733,6 +4838,78 @@ B) Dashboard（Web）
 
 * 单测：fake reranker 改变排序；noop 不改变排序；
 * 单测：reranker 抛异常触发回退且不抛到上层。
+
+**D-6 后续增强：Cross-Encoder 接入（分两阶段）**
+
+在现有 `noop / openai_compatible_llm` reranker 能力基础上，Cross-Encoder 接入作为 D-6 的后续增强，分两个增量推进：
+
+**Phase 1：最小接入**
+
+目的：先把 `cross_encoder` 作为真实 provider 接到现有 rerank 扩展点中，不改离线 schema。
+
+修改/新增文件（可见变化）：
+
+* `src/libs/providers/reranker/cross_encoder.py`
+* `src/libs/providers/reranker/__init__.py`
+* `src/libs/providers/bootstrap.py`
+* `src/core/query_engine/stages/rerank.py`（复用已有 metadata 注入与 fallback）
+* `config/strategies/local.cross_encoder.yaml`（或等价策略文件）
+* `pyproject.toml`（optional extra：Cross-Encoder 依赖）
+* `tests/unit/test_cross_encoder_reranker.py`
+* `tests/unit/test_builtin_providers.py`
+
+实现函数（最小集合）：
+
+* `CrossEncoderReranker.rerank(query, candidates) -> list[RankedCandidate]`
+* `CrossEncoderReranker._predict_pairs(pairs) -> list[float]`
+* `CrossEncoderReranker._load_model_cached(model_name, device, revision) -> Any`
+
+验收标准：
+
+* strategy 可通过 `providers.reranker.provider_id = cross_encoder` 启用；
+* Phase 1 默认基于 `chunk_text` 精排；
+* provider 异常时仍自动回退到 fusion 排序，并在 trace 中记录 `warn.rerank_fallback`；
+* 相同 query + 相同候选输入下，排序稳定、可回放。
+
+测试方法：
+
+* 单测：mock / fake score 下 Cross-Encoder 能改变排序；
+* 单测：空候选、无文本、同分 tie-break 行为稳定；
+* 单测：依赖缺失 / 模型加载失败 / 推理异常触发 fallback；
+* 集成：`reranker=noop` 与 `reranker=cross_encoder` 的 trace 都包含 `stage.rerank`，且返回结构不变。
+
+**Phase 2：retrieval view 对齐**
+
+目的：让 Cross-Encoder 默认基于 `chunk_retrieval_text` 精排，与 dense / sparse 的输入口径对齐。
+
+修改/新增文件（可见变化）：
+
+* `src/ingestion/stages/storage/sqlite.py`（`chunks` 表新增 `chunk_retrieval_text`）
+* `src/ingestion/stages/storage/upsert.py`（写入 retrieval view）
+* `src/core/query_engine/stages/rerank.py`（优先注入 `rerank_text=chunk_retrieval_text`）
+* `src/core/query_engine/stages/context_build.py`（必要时读取 facts / retrieval 双视图）
+* `tests/integration/test_query_runner_closed_loop.py`
+* `tests/integration/test_multimodal_caption_recall.py`
+* `tests/datasets/retrieval_small.yaml` / `tests/datasets/rag_eval_small.yaml`（补充 retrieval-view 受益 case）
+
+实现函数（最小集合）：
+
+* `SqliteStore.upsert_chunk(..., chunk_retrieval_text: str | None = None) -> None`
+* `SqliteStore.fetch_chunks(chunk_ids) -> list[ChunkRow]`（返回 `chunk_retrieval_text`）
+* `RerankStage.run(...)`（优先注入 retrieval view，缺失时回退 facts）
+
+验收标准：
+
+* Phase 2 默认优先使用 `chunk_retrieval_text` 做 Cross-Encoder 输入；
+* 老数据或缺字段时自动回退到 `chunk_text`，不影响兼容性；
+* facts 层 `chunk_text` 仍是 Response / citations 的唯一默认引用来源；
+* 能通过“facts 不含关键词、retrieval view 含 OCR/caption 关键词”的样本验证收益。
+
+测试方法：
+
+* 单测：`chunk_retrieval_text` 存在时优先用 retrieval view；缺失时回退 facts；
+* 集成：构造仅 retrieval view 命中的样本，断言 Cross-Encoder Phase 2 能改善排序；
+* 回归：Response / citations 仍只引用 `chunk_text`，不泄露 retrieval view。
 
 7. **D-7 Context 组装：chunk 回读 + citations + asset_ids**
 

@@ -1,0 +1,50 @@
+providers:
+  loader:
+    provider_id: loader.markdown
+  sectioner:
+    provider_id: sectioner.markdown_headings
+    params:
+      max_section_level: 2
+      include_heading: true
+  chunker:
+    provider_id: chunker.rcts_within_section
+    params:
+      chunk_size: 800
+      chunk_overlap: 120
+      separators: ["\n\n", "\n", " ", ""]
+  embedder:
+    provider_id: fake
+    params:
+      dim: 8
+  llm:
+    provider_id: fake
+    params:
+      name: fake-llm
+  vector_index:
+    provider_id: vector.chroma_lite
+  retriever:
+    provider_id: retriever.chroma_dense
+    params:
+      text_norm_profile_id: default
+  sparse_retriever:
+    provider_id: sparse_retriever.fts5
+  fusion:
+    provider_id: fusion.rrf
+    params:
+      k: 60
+  reranker:
+    provider_id: cross_encoder
+    params:
+      model_name: BAAI/bge-reranker-v2-m3
+      device: cpu
+      max_candidates: 30
+      batch_size: 8
+      max_length: 512
+      score_activation: sigmoid
+  enricher:
+    provider_id: noop
+  transform_post:
+    provider_id: default
+    params:
+      template_id: facts_plus_enrich
+      include_heading_text: false
