@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
-
 JsonDict = dict[str, Any]
 
 TRACE_SCHEMA_VERSION = "trace.v1"
@@ -171,6 +170,10 @@ def compute_aggregates(envelope: TraceEnvelope) -> JsonDict:
     stage_latency_ms: JsonDict = {}
     counters: JsonDict = {}
     errors: list[JsonDict] = []
+    rerank_applied = False
+    rerank_failed = False
+    effective_rank_source: str | None = None
+    rerank_profile_id: str | None = None
 
     for s in envelope.spans:
         if s.end_ts is not None:
@@ -196,10 +199,38 @@ def compute_aggregates(envelope: TraceEnvelope) -> JsonDict:
                     counters["generate.tokens_in"] = int(ev.attrs.get("tokens_in", 0))
                 if "tokens_out" in ev.attrs:
                     counters["generate.tokens_out"] = int(ev.attrs.get("tokens_out", 0))
+            elif ev.kind in {"rerank.used", "rerank.skipped"}:
+                if "rerank_applied" in ev.attrs:
+                    rerank_applied = bool(ev.attrs.get("rerank_applied"))
+                if "rerank_failed" in ev.attrs:
+                    rerank_failed = bool(ev.attrs.get("rerank_failed"))
+                src = ev.attrs.get("effective_rank_source")
+                if src is not None:
+                    effective_rank_source = str(src)
+                profile = ev.attrs.get("rerank_profile_id")
+                if profile is not None and str(profile).strip():
+                    rerank_profile_id = str(profile)
+            elif ev.kind == "warn.rerank_fallback":
+                rerank_failed = True
+                src = ev.attrs.get("effective_rank_source")
+                if src is not None:
+                    effective_rank_source = str(src)
+                profile = ev.attrs.get("rerank_profile_id")
+                if profile is not None and str(profile).strip():
+                    rerank_profile_id = str(profile)
 
-    return {
+    out = {
         "latency_ms": latency_ms,
         "stage_latency_ms": stage_latency_ms,
         "counters": counters,
         "errors": errors,
     }
+    if "stage.rerank" in stage_latency_ms:
+        out["rerank_latency_ms"] = stage_latency_ms["stage.rerank"]
+    if effective_rank_source is not None:
+        out["effective_rank_source"] = effective_rank_source
+        out["rerank_applied"] = rerank_applied
+        out["rerank_failed"] = rerank_failed
+    if rerank_profile_id is not None:
+        out["rerank_profile_id"] = rerank_profile_id
+    return out

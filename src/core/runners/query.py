@@ -4,15 +4,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from ..query_engine import QueryParams, QueryPipeline, QueryRuntime
-from ..response import ResponseIR
-from ..strategy import StrategyLoader, Settings, load_settings, merge_provider_overrides
 from ...ingestion.stages.storage.sqlite import SqliteStore
 from ...libs.factories import make_embedding, make_llm
 from ...libs.providers import register_builtin_providers
 from ...libs.registry import ProviderRegistry
 from ...observability.trace.context import TraceContext
-
+from ..query_engine import QueryParams, QueryPipeline, QueryRuntime
+from ..response import ResponseIR
+from ..strategy import Settings, StrategyLoader, load_settings, merge_provider_overrides
 
 RuntimeBuilder = Callable[[str], QueryRuntime]
 
@@ -51,7 +50,10 @@ class QueryRunner:
             if self.runtime_builder is not None:
                 runtime = self.runtime_builder(strategy_config_id)
             elif self.settings is not None:
-                runtime = _build_query_runtime_from_settings(strategy_config_id, settings=self.settings)
+                runtime = _build_query_runtime_from_settings(
+                    strategy_config_id,
+                    settings=self.settings,
+                )
             else:
                 runtime = _build_query_runtime(strategy_config_id, settings_path=self.settings_path)
             params = QueryParams(top_k=top_k, filters=filters)
@@ -65,7 +67,11 @@ def _build_query_runtime(strategy_config_id: str, *, settings_path: str | Path) 
     return _build_query_runtime_from_settings(strategy_config_id, settings=settings)
 
 
-def _build_query_runtime_from_settings(strategy_config_id: str, *, settings: Settings) -> QueryRuntime:
+def _build_query_runtime_from_settings(
+    strategy_config_id: str,
+    *,
+    settings: Settings,
+) -> QueryRuntime:
     strategy = StrategyLoader().load(strategy_config_id)
 
     registry = ProviderRegistry()
@@ -83,7 +89,8 @@ def _build_query_runtime_from_settings(strategy_config_id: str, *, settings: Set
 
     vec_provider_id, vec_params = strategy.resolve_provider("vector_index")
     vec_kwargs = dict(vec_params or {})
-    # Keep vector store location aligned to settings paths (important for local tests and MCP tools).
+    # Keep vector store location aligned to settings paths.
+    # This matters for local tests and MCP tools.
     if vec_provider_id == "vector.chroma_lite" and "db_path" not in vec_kwargs:
         vec_kwargs["db_path"] = str(settings.paths.chroma_dir / "chroma_lite.sqlite")
     if vec_provider_id == "vector.chroma" and "persist_dir" not in vec_kwargs:
@@ -137,11 +144,17 @@ def _build_query_runtime_from_settings(strategy_config_id: str, *, settings: Set
     reranker = None
     reranker_provider_id: str | None = None
     reranker_params: dict | None = None
+    rerank_profile_id: str | None = None
     try:
         reranker_provider_id, reranker_params = strategy.resolve_provider("reranker")
+        rerank_profile_id = _resolve_rerank_profile_id(reranker_provider_id, reranker_params)
         if reranker_provider_id not in {"noop", "reranker.noop"}:
             try:
-                reranker = registry.create("reranker", reranker_provider_id, **(reranker_params or {}))
+                reranker = registry.create(
+                    "reranker",
+                    reranker_provider_id,
+                    **(reranker_params or {}),
+                )
             except Exception as e:
                 # Keep rerank stage observable: fallback warning should be emitted in stage.rerank.
                 reranker = _InitErrorReranker(provider_id=reranker_provider_id, err_message=str(e))
@@ -173,6 +186,8 @@ def _build_query_runtime_from_settings(strategy_config_id: str, *, settings: Set
         fusion=fusion,
         reranker=reranker,
         llm=llm,
+        reranker_provider_id=reranker_provider_id,
+        rerank_profile_id=rerank_profile_id,
     )
 
 
@@ -194,7 +209,7 @@ def _attach_providers_snapshot(
     if ctx is None:
         return
 
-    def _meta(provider_id: str, params: dict | None) -> dict[str, Any]:
+    def _meta(kind: str, provider_id: str, params: dict | None) -> dict[str, Any]:
         params = params or {}
         profile_id = params.get("profile_id") or params.get("text_norm_profile_id")
         version = params.get("version") or params.get("model_version")
@@ -203,26 +218,47 @@ def _attach_providers_snapshot(
             meta["profile_id"] = str(profile_id)
         if version:
             meta["version"] = str(version)
+        if kind == "reranker":
+            rerank_profile_id = _resolve_rerank_profile_id(provider_id, params)
+            if rerank_profile_id:
+                meta["rerank_profile_id"] = rerank_profile_id
         return meta
 
     snapshot: dict[str, dict[str, Any]] = {}
 
     embedder_provider_id, embedder_params = strategy.resolve_provider("embedder")
-    snapshot["embedder"] = _meta(embedder_provider_id, embedder_params)
-    snapshot["vector_index"] = _meta(vec_provider_id, vec_params)
-    snapshot["retriever"] = _meta(retriever_provider_id, retriever_params)
+    snapshot["embedder"] = _meta("embedder", embedder_provider_id, embedder_params)
+    snapshot["vector_index"] = _meta("vector_index", vec_provider_id, vec_params)
+    snapshot["retriever"] = _meta("retriever", retriever_provider_id, retriever_params)
 
     try:
         llm_provider_id, llm_params = strategy.resolve_provider("llm")
-        snapshot["llm"] = _meta(llm_provider_id, llm_params)
+        snapshot["llm"] = _meta("llm", llm_provider_id, llm_params)
     except Exception:
         pass
 
     if sparse_provider_id:
-        snapshot["sparse_retriever"] = _meta(sparse_provider_id, sparse_params)
+        snapshot["sparse_retriever"] = _meta("sparse_retriever", sparse_provider_id, sparse_params)
     if fusion_provider_id:
-        snapshot["fusion"] = _meta(fusion_provider_id, fusion_params)
+        snapshot["fusion"] = _meta("fusion", fusion_provider_id, fusion_params)
     if reranker_provider_id:
-        snapshot["reranker"] = _meta(reranker_provider_id, reranker_params)
+        snapshot["reranker"] = _meta("reranker", reranker_provider_id, reranker_params)
 
     ctx.providers_snapshot = snapshot
+
+
+def _resolve_rerank_profile_id(provider_id: str | None, params: dict | None) -> str | None:
+    if not provider_id:
+        return None
+    raw = None
+    if isinstance(params, dict):
+        raw = (
+            params.get("rerank_profile_id")
+            or params.get("profile_id")
+            or params.get("text_profile_id")
+        )
+    if raw is not None:
+        text = str(raw).strip()
+        if text:
+            return text
+    return f"{provider_id}.default"

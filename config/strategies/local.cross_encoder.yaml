@@ -35,6 +35,7 @@ providers:
   reranker:
     provider_id: cross_encoder
     params:
+      rerank_profile_id: cross_encoder.default.v1
       model_name: BAAI/bge-reranker-v2-m3
       device: cpu
       max_candidates: 30

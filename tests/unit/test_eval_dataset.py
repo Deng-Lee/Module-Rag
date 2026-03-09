@@ -10,7 +10,7 @@ from src.core.eval.dataset import load_dataset
 def test_load_dataset_ok() -> None:
     dataset = load_dataset("tests/datasets/rag_eval_small.yaml")
     assert dataset.dataset_id == "rag_eval_small"
-    assert len(list(dataset.iter_cases())) == 3
+    assert len(list(dataset.iter_cases())) == 4
     first = next(dataset.iter_cases())
     assert first.query
     assert first.tags

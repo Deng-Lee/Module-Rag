@@ -3,11 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from ...ingestion.stages.storage.sqlite import SqliteStore
 from ...libs.interfaces.embedding import Embedder
 from ...libs.interfaces.llm import LLM
 from ...libs.interfaces.reranker import Reranker
 from ...libs.interfaces.vector_store import Candidate, Fusion, Retriever, VectorIndex
-from ...ingestion.stages.storage.sqlite import SqliteStore
 
 
 @dataclass(frozen=True)
@@ -44,3 +44,5 @@ class QueryRuntime:
     fusion: Fusion | None = None
     reranker: Reranker | None = None
     llm: LLM | None = None
+    reranker_provider_id: str | None = None
+    rerank_profile_id: str | None = None

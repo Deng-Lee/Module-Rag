@@ -19,13 +19,15 @@ from src.ingestion.stages.storage.fts5 import Fts5Store
 from src.ingestion.stages.storage.sqlite import SqliteStore
 from src.ingestion.stages.storage.upsert import UpsertStage
 from src.ingestion.stages.transform.asset_normalize import FsAssetNormalizer
-from src.ingestion.stages.transform.transform_post import TransformPostStage
 from src.ingestion.stages.transform.retrieval_view import RetrievalViewConfig
+from src.ingestion.stages.transform.transform_post import TransformPostStage
 from src.ingestion.stages.transform.transform_pre import DefaultTransformPre, TransformPreStage
+from src.libs.interfaces.vector_store import Candidate
 from src.libs.providers.embedding.fake_embedder import FakeEmbedder
 from src.libs.providers.enricher.openai_compatible_vision import collect_asset_ids
-from src.libs.providers.loader.markdown_loader import MarkdownLoader
 from src.libs.providers.llm.fake_llm import FakeLLM
+from src.libs.providers.loader.markdown_loader import MarkdownLoader
+from src.libs.providers.reranker.cross_encoder import CrossEncoderReranker
 from src.libs.providers.splitter.markdown_headings import MarkdownHeadingsSectioner
 from src.libs.providers.splitter.recursive_chunker import RecursiveCharChunkerWithinSection
 from src.libs.providers.vector_store.chroma_lite import ChromaLiteVectorIndex
@@ -51,7 +53,14 @@ class FakeVisionEnricher:
         caption = f"diagram shows {self.keyword}"
         return {
             "vision_snippets": [f"[image_caption asset_id={aid}] {caption}"],
-            "vision_assets": [{"asset_id": aid, "caption": caption, "ocr_text": "", "raw": {"caption": caption}}],
+            "vision_assets": [
+                {
+                    "asset_id": aid,
+                    "caption": caption,
+                    "ocr_text": "",
+                    "raw": {"caption": caption},
+                }
+            ],
         }
 
 
@@ -82,6 +91,15 @@ class _IngestState:
         return self.dedup.version_id
 
 
+@dataclass
+class _FixedRetriever:
+    candidates: list[Candidate]
+
+    def retrieve(self, query: str, top_k: int) -> list[Candidate]:
+        _ = query
+        return list(self.candidates[:top_k])
+
+
 def _build_ingest_pipeline(
     *,
     fs_store: FsStore,
@@ -105,7 +123,11 @@ def _build_ingest_pipeline(
         enrichers=[FakeVisionEnricher(keyword=keyword)],
         sqlite=sqlite_store,
     )
-    embedding = EmbeddingStage(embedder=FakeEmbedder(dim=8), embedder_id="fake", embedder_version="0")
+    embedding = EmbeddingStage(
+        embedder=FakeEmbedder(dim=8),
+        embedder_id="fake",
+        embedder_version="0",
+    )
     upsert = UpsertStage(
         fs=fs_store,
         sqlite=sqlite_store,
@@ -269,9 +291,129 @@ def test_caption_keyword_can_recall_chunk(tmp_path: Path, tmp_workdir: Path) -> 
             llm=FakeLLM(name="fake-llm"),
         )
 
-    resp = QueryRunner(runtime_builder=build_rt).run(keyword, strategy_config_id="local.default", top_k=3)
+    resp = QueryRunner(runtime_builder=build_rt).run(
+        keyword,
+        strategy_config_id="local.default",
+        top_k=3,
+    )
     assert resp.sources
     assert any(s.asset_ids for s in resp.sources)
+
+
+@pytest.mark.integration
+def test_cross_encoder_reranks_using_retrieval_view_text(
+    tmp_path: Path,
+    tmp_workdir: Path,
+    monkeypatch,
+) -> None:
+    _ = tmp_workdir
+
+    keyword = "caption_keyword_only"
+
+    data_dir = tmp_path / "data"
+    raw_dir = data_dir / "raw"
+    md_dir = data_dir / "md"
+    assets_dir = data_dir / "assets"
+    sqlite_dir = data_dir / "sqlite"
+    chroma_dir = data_dir / "chroma"
+
+    fixtures_dir = Path(__file__).resolve().parents[1] / "fixtures"
+    tpl = (fixtures_dir / "docs" / "sample.md").read_text(encoding="utf-8")
+    img_src = fixtures_dir / "assets" / "sample.svg"
+    img_path = tmp_path / "sample.svg"
+    img_path.write_bytes(img_src.read_bytes())
+
+    caption_doc = tmp_path / "caption_doc.md"
+    caption_doc.write_text(tpl.replace("{{IMG_PATH}}", img_path.as_posix()), encoding="utf-8")
+    facts_doc = tmp_path / "facts_doc.md"
+    facts_doc.write_text("# Notes\n\nThis chunk has no retrieval-only keyword.\n", encoding="utf-8")
+
+    fs_store = FsStore(raw_dir=raw_dir, md_dir=md_dir)
+    sqlite_store = SqliteStore(db_path=sqlite_dir / "app.sqlite")
+    fts5 = Fts5Store(db_path=sqlite_dir / "fts.sqlite")
+    vector_index = ChromaLiteVectorIndex(db_path=str(chroma_dir / "chroma_lite.sqlite"))
+
+    pipeline = _build_ingest_pipeline(
+        fs_store=fs_store,
+        sqlite_store=sqlite_store,
+        assets_dir=assets_dir,
+        fts5=fts5,
+        vector_index=vector_index,
+        keyword=keyword,
+    )
+
+    caption_state = _IngestState(input_path=caption_doc, policy="skip")
+    caption_result = pipeline.run(caption_state, strategy_config_id="local.default")
+    assert caption_result.status == "ok"
+
+    facts_state = _IngestState(input_path=facts_doc, policy="skip")
+    facts_result = pipeline.run(facts_state, strategy_config_id="local.default")
+    assert facts_result.status == "ok"
+
+    with sqlite_store._connect() as conn:  # type: ignore[attr-defined]
+        conn.row_factory = None
+        caption_chunk_id = str(
+            conn.execute(
+                "SELECT chunk_id FROM chunks WHERE doc_id=? LIMIT 1",
+                (caption_state.doc_id,),
+            ).fetchone()[0]
+        )
+        facts_chunk_id = str(
+            conn.execute(
+                "SELECT chunk_id FROM chunks WHERE doc_id=? LIMIT 1",
+                (facts_state.doc_id,),
+            ).fetchone()[0]
+        )
+
+    monkeypatch.setattr(
+        CrossEncoderReranker,
+        "_predict_pairs",
+        lambda self, pairs: [1.0 if keyword in text else 0.1 for _, text in pairs],
+    )
+    reranker = CrossEncoderReranker(model_name="dummy", max_candidates=2, score_activation="raw")
+
+    def build_rt(_: str) -> QueryRuntime:
+        return QueryRuntime(
+            embedder=FakeEmbedder(dim=8),
+            vector_index=ChromaLiteVectorIndex(db_path=str(chroma_dir / "chroma_lite.sqlite")),
+            retriever=_FixedRetriever(
+                [
+                    Candidate(
+                        chunk_id=facts_chunk_id,
+                        score=1.0,
+                        source="dense",
+                        metadata={
+                            "chunk_text": "stale facts text",
+                            "rerank_text": "stale retrieval text",
+                        },
+                    ),
+                    Candidate(chunk_id=caption_chunk_id, score=0.9, source="dense"),
+                ]
+            ),
+            sparse_retriever=None,
+            sqlite=SqliteStore(db_path=sqlite_dir / "app.sqlite"),
+            fusion=None,
+            reranker=reranker,
+            llm=FakeLLM(name="fake-llm"),
+            reranker_provider_id="cross_encoder",
+            rerank_profile_id="cross_encoder.default.v1",
+        )
+
+    resp = QueryRunner(runtime_builder=build_rt).run(
+        keyword,
+        strategy_config_id="local.default",
+        top_k=2,
+    )
+    assert resp.sources
+    assert resp.sources[0].chunk_id == caption_chunk_id
+    rerank_span = [s for s in resp.trace.spans if s.name == "stage.rerank"][0]
+    used_events = [e for e in rerank_span.events if e.kind == "rerank.used"]
+    assert used_events
+    assert used_events[-1].attrs.get("text_source") == "retrieval_view"
+    assert used_events[-1].attrs.get("effective_rank_source") == "rerank"
+    assert used_events[-1].attrs.get("rerank_profile_id") == "cross_encoder.default.v1"
+    assert resp.trace.aggregates.get("effective_rank_source") == "rerank"
+    assert resp.trace.aggregates.get("rerank_profile_id") == "cross_encoder.default.v1"
 
 
 @pytest.mark.integration
@@ -328,7 +470,11 @@ def test_response_uses_fact_text_not_retrieval_view(tmp_path: Path, tmp_workdir:
             llm=FakeLLM(name="fake-llm"),
         )
 
-    resp = QueryRunner(runtime_builder=build_rt).run(keyword, strategy_config_id="local.default", top_k=3)
+    resp = QueryRunner(runtime_builder=build_rt).run(
+        keyword,
+        strategy_config_id="local.default",
+        top_k=3,
+    )
     assert resp.sources
     # Retrieval view markers should not leak into the returned markdown.
     assert "image_caption" not in resp.content_md

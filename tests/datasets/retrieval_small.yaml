@@ -11,6 +11,10 @@
     {
       "name": "doc_fusion",
       "md": "# Fusion\n\nRRF (reciprocal rank fusion) merges dense and sparse results.\n\nRerank stage must have fallback when provider fails.\n"
+    },
+    {
+      "name": "doc_rerank_view",
+      "md": "# Rerank View\n\nThe system stores `chunk_retrieval_text` as the retrieval view for dense, sparse, and Cross-Encoder rerank.\n\nWhen rerank fails, the pipeline falls back to fusion and records the effective rank source.\n"
     }
   ],
   "queries": [
@@ -31,7 +35,12 @@
       "query": "What is RRF fusion in hybrid retrieval?",
       "k": 5,
       "expected_terms": ["RRF", "fusion"]
+    },
+    {
+      "id": "q_rerank_view",
+      "query": "Which field is used as the retrieval view for Cross-Encoder rerank?",
+      "k": 5,
+      "expected_terms": ["chunk_retrieval_text", "Cross-Encoder", "retrieval view"]
     }
   ]
 }
-

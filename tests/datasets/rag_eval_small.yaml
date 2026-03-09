@@ -26,6 +26,14 @@
       "expected": {
         "keywords": ["RRF", "fusion", "hybrid"]
       }
+    },
+    {
+      "case_id": "case_rerank_view_001",
+      "query": "Which field is used as the retrieval view for Cross-Encoder rerank?",
+      "tags": ["retrieval", "rerank", "cross_encoder"],
+      "expected": {
+        "keywords": ["chunk_retrieval_text", "Cross-Encoder", "retrieval view"]
+      }
     }
   ]
 }
