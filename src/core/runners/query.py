@@ -150,10 +150,13 @@ def _build_query_runtime_from_settings(
         rerank_profile_id = _resolve_rerank_profile_id(reranker_provider_id, reranker_params)
         if reranker_provider_id not in {"noop", "reranker.noop"}:
             try:
+                reranker_ctor_params = dict(reranker_params or {})
+                # Observability/versioning metadata should stay in trace, not leak into provider ctors.
+                reranker_ctor_params.pop("rerank_profile_id", None)
                 reranker = registry.create(
                     "reranker",
                     reranker_provider_id,
-                    **(reranker_params or {}),
+                    **reranker_ctor_params,
                 )
             except Exception as e:
                 # Keep rerank stage observable: fallback warning should be emitted in stage.rerank.

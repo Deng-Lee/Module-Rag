@@ -1,0 +1,55 @@
+providers:
+  loader:
+    provider_id: loader.markdown
+  sectioner:
+    provider_id: sectioner.markdown_headings
+    params:
+      max_section_level: 2
+      include_heading: true
+  chunker:
+    provider_id: chunker.rcts_within_section
+    params:
+      chunk_size: 800
+      chunk_overlap: 120
+      separators: ["\n\n", "\n", " ", ""]
+  embedder:
+    provider_id: openai_compatible
+    params:
+      endpoint_key: qwen
+      model: text-embedding-v3
+      batch_size: 10
+      timeout_s: 20
+  llm:
+    provider_id: openai_compatible
+    params:
+      endpoint_key: qwen
+      model: qwen-turbo
+      timeout_s: 30
+  vector_index:
+    provider_id: vector.chroma
+  retriever:
+    provider_id: retriever.chroma_dense
+    params:
+      text_norm_profile_id: default
+  sparse_retriever:
+    provider_id: sparse_retriever.fts5
+  fusion:
+    provider_id: fusion.rrf
+    params:
+      k: 60
+  reranker:
+    provider_id: openai_compatible_llm
+    params:
+      endpoint_key: qwen
+      model: qwen-turbo
+      timeout_s: 30
+      max_candidates: 8
+      max_chunk_chars: 600
+      rerank_profile_id: qwen.prodlike.r1
+  enricher:
+    provider_id: noop
+  transform_post:
+    provider_id: default
+    params:
+      template_id: facts_only
+      include_heading_text: false

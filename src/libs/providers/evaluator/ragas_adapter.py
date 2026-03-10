@@ -44,6 +44,7 @@ class RagasAdapter:
     api_key: str | None = None
     base_url: str | None = None
     model: str | None = None
+    embedding_model: str | None = None
     endpoint_key: str | None = None  # accepted for config compatibility (resolved upstream)
 
     def evaluate_case(self, case: Any, run_output: dict[str, Any]) -> EvalCaseResult:
@@ -85,6 +86,8 @@ class RagasAdapter:
         # Some stacks read this; harmless if ignored.
         if isinstance(self.model, str) and self.model:
             env["OPENAI_MODEL"] = self.model
+        if isinstance(self.embedding_model, str) and self.embedding_model:
+            env["OPENAI_EMBEDDING_MODEL"] = self.embedding_model
 
         try:
             # Prefer constructing an explicit ragas LLM using provided api_key/base_url
@@ -111,7 +114,12 @@ class RagasAdapter:
             emb_obj = None
             try:
                 if 'client' in locals():
-                    embedding_model = os.environ.get('OPENAI_EMBEDDING_MODEL') or os.environ.get('OPENAI_MODEL') or 'text-embedding-3-small'
+                    embedding_model = (
+                        self.embedding_model
+                        or os.environ.get('OPENAI_EMBEDDING_MODEL')
+                        or os.environ.get('OPENAI_MODEL')
+                        or 'text-embedding-3-small'
+                    )
 
                     class _RagasEmbeddings:
                         def __init__(self, client, model: str):
@@ -153,8 +161,12 @@ class RagasAdapter:
                 artifacts={
                     "error": "backend_error",
                     "backend": "ragas",
+                    "stage": "ragas.evaluate",
                     "exc_type": type(exc).__name__,
                     "message": str(exc),
+                    "model": self.model or "",
+                    "embedding_model": self.embedding_model or "",
+                    "base_url": self.base_url or "",
                     "hint": "set OPENAI_API_KEY (or configure evaluator api_key via model_endpoints)",
                 },
             )
@@ -169,7 +181,11 @@ class RagasAdapter:
         return EvalCaseResult(
             case_id=_case_id(case),
             metrics=metrics,
-            artifacts={"ragas_metrics": list(extracted.keys())},
+            artifacts={
+                "ragas_metrics": list(extracted.keys()),
+                "model": self.model or "",
+                "embedding_model": self.embedding_model or "",
+            },
         )
 
 

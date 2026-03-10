@@ -12,7 +12,8 @@ description: Run MODULE-RAG QA baseline (OFFLINE + REAL) from QA_TEST.md, using 
 - 判定口径：
   - `OFFLINE` 可在无外网环境稳定回归；
   - `REAL` 需要外网 + 密钥/endpoint；若环境不可用必须标记 `BLOCKED(env:network)`，不能误判为系统失败。
-  - `REAL` 的“外网可达”通常只在**本机 Terminal**成立；在受限沙箱里跑 REAL 很可能被判 `BLOCKED(env:network)`。
+  - `OFFLINE + REAL` 都必须在**非沙箱 / 本机 Terminal**环境执行；不要在受限沙箱中执行 baseline 正式回归。
+  - 若当前处于受限沙箱，应该切换到非沙箱执行，而不是接受沙箱内的 `BLOCKED(env:network)` 结果作为正式结论。
 
 ## Trigger
 
@@ -45,14 +46,11 @@ description: Run MODULE-RAG QA baseline (OFFLINE + REAL) from QA_TEST.md, using 
 
 ### 0) Choose Execution Context (important)
 
-本 Skill 有两种可执行形态，**不要混用口径**：
+本 Skill 只有一种正式执行形态：
 
-- 形态 A（推荐：本机 Terminal 全量回归）：
-  - 同一台机器里把 `OFFLINE + REAL` 一次跑完，得到真正的 `Overall=PASS/FAIL` 判定。
-- 形态 B（Codex/沙箱内做 OFFLINE 回归 + 本机补 REAL）：
-  - 沙箱里只跑 `OFFLINE`（用于快速回归）。
-  - `REAL` 必须在本机 Terminal 补跑；否则会长期显示 `BLOCKED(env:network)` 或 `REAL=N/A`。
-  - 注意：分两次跑会在 `QA_TEST_PROGRESS.md` 产生两个 Run block（同一 run_id 需要手工对照/合并口径）。
+- 使用**非沙箱 / 本机 Terminal**一次跑完 `OFFLINE + REAL`。
+- 不接受“沙箱里跑 OFFLINE、再手工补 REAL”的混合口径作为正式 baseline 结果。
+- 若当前工具默认在沙箱内执行，必须显式切换到非沙箱环境后再运行 baseline。
 
 ### 1) Choose Run Id
 
@@ -91,6 +89,15 @@ description: Run MODULE-RAG QA baseline (OFFLINE + REAL) from QA_TEST.md, using 
 
 - 若错误包含 DNS/网络不可达（典型：`[Errno 8] nodename nor servname provided`），标记 `BLOCKED(env:network)`，并在“下一步”给出恢复建议（本机 Terminal 执行）。
 - 若返回 4xx/5xx 且能连接到服务（如 401/403/400），标记 `FAIL(system or config)`，并记录 provider/model/endpoint_key 与错误码。
+- 无论是 `BLOCKED` 还是 `FAIL`，都必须继续排查并给出**详细报错信息**，至少包含：
+  - 报错流程：发生在 `preflight / embedding / retrieve / rerank / llm generate / dashboard api / eval` 的哪一段
+  - 报错位置：具体命令、脚本函数、阶段名、接口路由、测试用例号
+  - 报错模型：具体 `provider_id / endpoint_key / model / strategy_config_id`
+  - 报错原文：异常类型、HTTP 状态码、服务端错误体、trace_id、关键堆栈或错误消息
+- 若报错发生在模型调用链路，必须进一步说明：
+  - 是哪个模型先失败
+  - 失败前的上游流程是否已成功（例如 ingest 成功、query_norm 成功、retrieve 成功、在 rerank 或 generate 失败）
+  - 是否触发 fallback；若触发，fallback 结果是什么
 
 ### 5) Write QA_TEST_PROGRESS.md
 
@@ -113,10 +120,20 @@ description: Run MODULE-RAG QA baseline (OFFLINE + REAL) from QA_TEST.md, using 
 - `FAIL(system)`：本机网络可达但系统逻辑错误（如 chunk=0、查询空召回、入库失败、接口 5xx）。
 - `FAIL(config)`：网络可达但配置错误（endpoint_key/model/api_key 不匹配导致 4xx）。
 
+对 `REAL` 失败的回填要求（必须写进 `QA_TEST_PROGRESS.md`）：
+
+- `error_stage`：失败阶段
+- `error_location`：失败位置（文件/函数/API/用例号）
+- `error_model`：失败模型信息（provider/endpoint/model/strategy）
+- `error_detail`：完整错误摘要（异常类型 + 关键信息 + HTTP 状态码/响应体/trace_id）
+- `fallback_status`：是否触发降级、降级后的结果
+- `next_action`：下一步排查或修复命令
+
 ## Anti-patterns
 
 - 只跑 REAL 或只跑 OFFLINE 就标记整体 PASS（必须分别记录）。
 - REAL 在受限环境失败就判定系统失败（应标记 `BLOCKED(env)`）。
+- REAL 报错后只写一句“失败了”或只写状态码，不写报错流程/位置/模型/原文。
 - 不做“干净库”隔离导致历史数据污染结论。
 - 只写“失败了”不写证据与下一步命令。
 
@@ -126,6 +143,12 @@ description: Run MODULE-RAG QA baseline (OFFLINE + REAL) from QA_TEST.md, using 
 
 ```bash
 PYTHONPATH=. .venv/bin/python skills/qa-baseline/scripts/run_baseline.py --suite all --profiles offline,real
+```
+
+执行 production-like REAL strategy 专项回归：
+
+```bash
+PYTHONPATH=. .venv/bin/python skills/qa-baseline/scripts/run_production_like_real.py
 ```
 
 执行 QA_TEST.md A..O 全量（逐条执行并回填）：

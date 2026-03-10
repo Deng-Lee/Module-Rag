@@ -1,0 +1,43 @@
+# Production-like REAL strategy settings (generated)
+# DO NOT COMMIT
+# run_id: 20260310_132013
+paths:
+  data_dir: /Users/lee/Documents/AI/MODULE-RAG/data/qa_runs/20260310_132013/production_like_real
+  raw_dir: /Users/lee/Documents/AI/MODULE-RAG/data/qa_runs/20260310_132013/production_like_real/raw
+  md_dir: /Users/lee/Documents/AI/MODULE-RAG/data/qa_runs/20260310_132013/production_like_real/md
+  assets_dir: /Users/lee/Documents/AI/MODULE-RAG/data/qa_runs/20260310_132013/production_like_real/assets
+  chroma_dir: /Users/lee/Documents/AI/MODULE-RAG/data/qa_runs/20260310_132013/production_like_real/chroma
+  sqlite_dir: /Users/lee/Documents/AI/MODULE-RAG/data/qa_runs/20260310_132013/production_like_real/sqlite
+  cache_dir: /Users/lee/Documents/AI/MODULE-RAG/cache/qa_runs/20260310_132013/production_like_real
+  logs_dir: /Users/lee/Documents/AI/MODULE-RAG/logs/qa_runs/20260310_132013/production_like_real
+server:
+  dashboard_host: 127.0.0.1
+  dashboard_port: 7860
+defaults:
+  strategy_config_id: local.production_like
+eval:
+  datasets_dir: tests/datasets
+providers:
+  embedder:
+    params:
+      timeout_s: 20
+  llm:
+    params:
+      timeout_s: 30
+  reranker:
+    params:
+      timeout_s: 30
+  judge:
+    provider_id: openai_compatible
+    params:
+      endpoint_key: qwen
+      model: qwen-turbo
+      timeout_s: 30
+  evaluator:
+    provider_id: ragas
+    params:
+      endpoint_key: qwen
+      model: qwen-turbo
+      embedding_model: text-embedding-v3
+  enricher:
+    provider_id: noop

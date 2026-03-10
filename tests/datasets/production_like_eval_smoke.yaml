@@ -1,0 +1,15 @@
+{
+  "dataset_id": "production_like_eval_smoke",
+  "version": "0.1",
+  "description": "Single-case eval dataset for production-like REAL strategy validation.",
+  "cases": [
+    {
+      "case_id": "prodlike_fts5_001",
+      "query": "Explain SQLite FTS5 inverted index and BM25.",
+      "tags": ["retrieval", "fts5", "production_like"],
+      "expected": {
+        "keywords": ["FTS5", "BM25", "inverted index"]
+      }
+    }
+  ]
+}

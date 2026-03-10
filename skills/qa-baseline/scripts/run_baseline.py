@@ -5,6 +5,7 @@ import json
 import os
 import re
 import socket
+import signal
 import subprocess
 import sys
 import time
@@ -55,7 +56,27 @@ def _yaml_dump_simple(d: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _write_settings(path: Path, *, run_id: str, profile: str, defaults_strategy: str) -> None:
+def _merge_dicts(base: dict[str, Any], override: dict[str, Any] | None) -> dict[str, Any]:
+    if not override:
+        return dict(base)
+    out = dict(base)
+    for k, v in override.items():
+        cur = out.get(k)
+        if isinstance(cur, dict) and isinstance(v, dict):
+            out[k] = _merge_dicts(cur, v)
+        else:
+            out[k] = v
+    return out
+
+
+def _write_settings(
+    path: Path,
+    *,
+    run_id: str,
+    profile: str,
+    defaults_strategy: str,
+    providers_override: dict[str, Any] | None = None,
+) -> None:
     root = _repo_root()
     base = root / "config" / "settings.yaml"
     if not base.exists():
@@ -83,6 +104,17 @@ def _write_settings(path: Path, *, run_id: str, profile: str, defaults_strategy:
         "defaults": {"strategy_config_id": defaults_strategy},
         "eval": {"datasets_dir": "tests/datasets"},
     }
+    if profile.startswith("real"):
+        obj["providers"] = {
+            "embedder": {"params": {"timeout_s": 20}},
+            "llm": {"params": {"timeout_s": 20}},
+            "judge": {"provider_id": "noop"},
+            "evaluator": {"provider_id": "composite"},
+            "reranker": {"provider_id": "noop"},
+            "enricher": {"provider_id": "noop"},
+        }
+    if providers_override:
+        obj["providers"] = _merge_dicts(obj.get("providers", {}), providers_override)
 
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -115,6 +147,7 @@ class StepResult:
     trace_id: str | None = None
     details: dict[str, Any] | None = None
     error: str | None = None
+    diagnostic: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -135,6 +168,10 @@ class CaseResult:
     real: StepResult | None = None
     overall: str = "TODO"
     note: str = ""
+
+
+class _CaseTimeoutError(TimeoutError):
+    pass
 
 
 def _compute_overall(case: Case, offline: StepResult | None, real: StepResult | None) -> str:
@@ -171,6 +208,161 @@ def _classify_real_error(msg: str) -> str:
     if RE_ERRNO8.search(m) or "nodename nor servname provided" in m:
         return "BLOCKED(env:network)"
     return "FAIL(system_or_config)"
+
+
+def _flow_for_case(case: Case) -> str:
+    group = case.case_id.split("-", 1)[0]
+    mapping = {
+        "A": "dashboard overview api",
+        "B": "documents/chunks browse api",
+        "C": "ingest api",
+        "D": "trace replay api",
+        "E": "query trace api",
+        "F": "eval api",
+        "G": "ingestion pipeline",
+        "H": "retrieve/query pipeline",
+        "I": "eval runner",
+        "J": "mcp protocol/tools",
+        "K": "provider switch / llm fallback",
+        "L": "rerank pipeline",
+        "M": "config/tool validation",
+        "N": "delete/query consistency",
+        "O": "versioning / mixed retrieval",
+    }
+    return mapping.get(group, "unknown")
+
+
+def _relevant_provider_kinds(case: Case) -> tuple[str, ...]:
+    group = case.case_id.split("-", 1)[0]
+    if group in {"A", "B", "D", "E", "F", "J", "M"}:
+        return ()
+    if group in {"C", "G"}:
+        return ("embedder",)
+    if group in {"K"}:
+        return ("llm",)
+    if group in {"L"}:
+        return ("reranker",)
+    if group in {"I"}:
+        return ("judge", "llm")
+    return ("embedder", "llm", "reranker")
+
+
+def _provider_snapshot(env: "ProfileEnv") -> dict[str, dict[str, Any]]:
+    settings = env.settings
+    raw = getattr(settings, "raw", {}) or {}
+    providers = raw.get("providers") or {}
+    endpoints = raw.get("model_endpoints") or {}
+    out: dict[str, dict[str, Any]] = {}
+    if not isinstance(providers, dict):
+        return out
+    for kind in ("embedder", "llm", "judge", "reranker"):
+        spec = providers.get(kind)
+        if not isinstance(spec, dict):
+            continue
+        params = spec.get("params") or {}
+        endpoint_key = params.get("endpoint_key") if isinstance(params, dict) else None
+        endpoint = endpoints.get(endpoint_key) if isinstance(endpoints, dict) and endpoint_key else None
+        item = {
+            "provider_id": spec.get("provider_id"),
+            "endpoint_key": endpoint_key,
+            "model": params.get("model") if isinstance(params, dict) else None,
+            "strategy_config_id": env.strategy_config_id,
+        }
+        if isinstance(endpoint, dict) and endpoint.get("base_url"):
+            item["base_url"] = endpoint.get("base_url")
+        out[kind] = {k: v for k, v in item.items() if v not in {None, ""}}
+    return out
+
+
+def _fallback_hint(case: Case) -> str | None:
+    if case.case_id == "K-02":
+        return "llm failure should fall back to extractive answer"
+    if case.case_id == "L-03":
+        return "rerank failure should fall back to fusion order"
+    return None
+
+
+def _build_real_diagnostic(
+    case: Case,
+    env: "ProfileEnv",
+    *,
+    location: str,
+    error: str | None,
+    trace_id: str | None = None,
+) -> dict[str, Any]:
+    snapshot = _provider_snapshot(env)
+    relevant_kinds = _relevant_provider_kinds(case)
+    relevant = {k: snapshot[k] for k in relevant_kinds if k in snapshot}
+    return {
+        "flow": _flow_for_case(case),
+        "location": location,
+        "case_id": case.case_id,
+        "strategy_config_id": env.strategy_config_id,
+        "models": relevant or snapshot,
+        "raw_error": error,
+        "trace_id": trace_id,
+        "fallback": _fallback_hint(case),
+    }
+
+
+def _attach_real_diagnostic(case: Case, env: "ProfileEnv", sr: StepResult, *, location: str) -> StepResult:
+    if sr.status.startswith("PASS") or sr.diagnostic:
+        return sr
+    sr.diagnostic = _build_real_diagnostic(case, env, location=location, error=sr.error, trace_id=sr.trace_id)
+    return sr
+
+
+def _format_models(models: Any) -> str:
+    if not isinstance(models, dict) or not models:
+        return "n/a"
+    parts: list[str] = []
+    for kind, spec in models.items():
+        if not isinstance(spec, dict):
+            continue
+        provider_id = spec.get("provider_id") or "unknown"
+        model = spec.get("model")
+        endpoint_key = spec.get("endpoint_key")
+        chunk = f"{kind}={provider_id}"
+        if model:
+            chunk += f"/{model}"
+        if endpoint_key:
+            chunk += f"@{endpoint_key}"
+        parts.append(chunk)
+    return ", ".join(parts) if parts else "n/a"
+
+
+def _summarize_diagnostic(diag: dict[str, Any] | None) -> str:
+    if not diag:
+        return ""
+    parts = [
+        f"flow={diag.get('flow') or 'unknown'}",
+        f"location={diag.get('location') or 'unknown'}",
+        f"model={_format_models(diag.get('models'))}",
+    ]
+    fallback = diag.get("fallback")
+    if fallback:
+        parts.append(f"fallback={fallback}")
+    raw = str(diag.get("raw_error") or "").strip()
+    if raw:
+        parts.append(f"raw={raw[:220]}")
+    return "; ".join(parts)
+
+
+def _run_with_timeout(timeout_s: float, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+    if timeout_s <= 0:
+        return fn(*args, **kwargs)
+
+    def _raise_timeout(signum: int, frame: Any) -> None:
+        raise _CaseTimeoutError(f"case exceeded {timeout_s:.0f}s")
+
+    old_handler = signal.getsignal(signal.SIGALRM)
+    signal.signal(signal.SIGALRM, _raise_timeout)
+    signal.setitimer(signal.ITIMER_REAL, timeout_s)
+    try:
+        return fn(*args, **kwargs)
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, old_handler)
 
 
 def _load_cases(qa_test_path: Path) -> list[Case]:
@@ -286,14 +478,12 @@ class ProfileEnv:
     def activate(self) -> None:
         _ensure_repo_on_syspath()
         os.environ["MODULE_RAG_SETTINGS_PATH"] = str(self.settings_path)
-        # Ensure OFFLINE runs never pick up local secrets/endpoints by default.
-        # load_settings() merges config/local.override.yaml and model_endpoints.local.yaml unless
-        # these env vars point somewhere else. Point them to non-existent paths to disable.
+        # Baseline runs should be driven by the generated settings, not ad-hoc local overrides.
+        # Point secrets override to a non-existent file for both OFFLINE/REAL.
+        os.environ["MODULE_RAG_SECRETS_PATH"] = str(self.settings_path.parent / "__NO_OVERRIDE__.yaml")
         if self.name == "OFFLINE":
-            os.environ["MODULE_RAG_SECRETS_PATH"] = str(self.settings_path.parent / "__NO_OVERRIDE__.yaml")
             os.environ["MODULE_RAG_MODEL_ENDPOINTS_PATH"] = str(self.settings_path.parent / "__NO_ENDPOINTS__.yaml")
         else:
-            os.environ.pop("MODULE_RAG_SECRETS_PATH", None)
             os.environ.pop("MODULE_RAG_MODEL_ENDPOINTS_PATH", None)
         # Bind observability sink to this env so /api/traces has data.
         from src.core.strategy import load_settings
@@ -378,6 +568,181 @@ def _require_ui_tokens(path: Path, tokens: list[str]) -> str | None:
     if missing:
         return f"ui_contract_missing:{path.name}:{'|'.join(missing[:3])}"
     return None
+
+
+def _trace_span(trace: Any, name: str) -> Any | None:
+    spans = getattr(trace, "spans", None)
+    if not isinstance(spans, list):
+        return None
+    for span in spans:
+        if getattr(span, "name", None) == name:
+            return span
+    return None
+
+
+def _trace_has_event(trace: Any, span_name: str, kind: str) -> bool:
+    span = _trace_span(trace, span_name)
+    events = getattr(span, "events", None) if span is not None else None
+    if not isinstance(events, list):
+        return False
+    return any(getattr(ev, "kind", None) == kind for ev in events)
+
+
+def _last_trace_event(trace: Any, span_name: str, kind: str) -> Any | None:
+    span = _trace_span(trace, span_name)
+    events = getattr(span, "events", None) if span is not None else None
+    if not isinstance(events, list):
+        return None
+    matches = [ev for ev in events if getattr(ev, "kind", None) == kind]
+    return matches[-1] if matches else None
+
+
+def _is_cross_encoder_env_unready(exc: Exception) -> bool:
+    m = str(exc).lower()
+    return (
+        "cross_encoder dependency missing" in m
+        or "no module named 'sentence_transformers'" in m
+        or "httpsconnectionpool" in m
+        or "connection error" in m
+        or "timed out" in m
+        or "name or service not known" in m
+        or "temporary failure in name resolution" in m
+        or "ssl" in m
+    )
+
+
+def _make_provider(kind: str, provider_id: str, **kwargs: Any) -> Any:
+    _ensure_repo_on_syspath()
+    from src.libs.providers import register_builtin_providers
+    from src.libs.registry import ProviderRegistry
+
+    registry = ProviderRegistry()
+    register_builtin_providers(registry)
+    return registry.create(kind, provider_id, **kwargs)
+
+
+def _start_fake_openai_chat_server(content: str) -> tuple[str, Any]:
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from threading import Thread
+
+    body = json.dumps(
+        {
+            "id": "chatcmpl-qa",
+            "object": "chat.completion",
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": content}}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+        },
+        ensure_ascii=False,
+    ).encode("utf-8")
+
+    class _Handler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:  # noqa: N802
+            _ = self.rfile.read(int(self.headers.get("Content-Length", "0") or "0"))
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format: str, *args: Any) -> None:  # pragma: no cover
+            _ = format, args
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return f"http://127.0.0.1:{server.server_port}/v1", server
+
+
+def _make_fixed_query_runtime_builder(
+    *,
+    work_dir: Path,
+    llm: Any,
+    llm_provider_id: str | None = None,
+    reranker: Any | None = None,
+    reranker_provider_id: str | None = None,
+    rerank_profile_id: str | None = None,
+    empty_candidates: bool = False,
+) -> tuple[Callable[[str], Any], dict[str, str]]:
+    _ensure_repo_on_syspath()
+    from src.core.query_engine.models import QueryRuntime
+    from src.ingestion.stages.storage.sqlite import SqliteStore
+    from src.libs.interfaces.vector_store import Candidate
+    from src.libs.providers.embedding.fake_embedder import FakeEmbedder
+    from src.libs.providers.vector_store.in_memory import InMemoryVectorIndex
+    from src.observability.trace.context import TraceContext
+
+    work_dir.mkdir(parents=True, exist_ok=True)
+    sqlite = SqliteStore(db_path=work_dir / "app.sqlite")
+    ids = {"relevant": "chk_paris", "irrelevant": "chk_banana"}
+
+    if not empty_candidates:
+        sqlite.upsert_doc_version_minimal("doc_rel", "ver_rel", file_sha256="h1", status="indexed")
+        sqlite.upsert_chunk(
+            chunk_id=ids["relevant"],
+            doc_id="doc_rel",
+            version_id="ver_rel",
+            section_id="sec_rel",
+            section_path="France",
+            chunk_index=1,
+            chunk_text="Paris is the capital of France.",
+            chunk_retrieval_text="Paris is the capital of France.",
+        )
+        sqlite.upsert_doc_version_minimal("doc_irr", "ver_irr", file_sha256="h2", status="indexed")
+        sqlite.upsert_chunk(
+            chunk_id=ids["irrelevant"],
+            doc_id="doc_irr",
+            version_id="ver_irr",
+            section_id="sec_irr",
+            section_path="Fruit",
+            chunk_index=1,
+            chunk_text="Bananas are yellow fruits rich in potassium.",
+            chunk_retrieval_text="Bananas are yellow fruits rich in potassium.",
+        )
+
+    candidates = []
+    if not empty_candidates:
+        candidates = [
+            Candidate(chunk_id=ids["irrelevant"], score=1.0, source="dense"),
+            Candidate(chunk_id=ids["relevant"], score=0.9, source="dense"),
+        ]
+
+    class _FixedRetriever:
+        def __init__(self, fixed: list[Any]) -> None:
+            self._fixed = list(fixed)
+
+        def retrieve(self, query: str, top_k: int) -> list[Any]:
+            _ = query
+            return list(self._fixed[:top_k])
+
+    retriever = _FixedRetriever(candidates)
+    embedder = FakeEmbedder(dim=8)
+    vector_index = InMemoryVectorIndex()
+
+    def build_rt(_: str) -> Any:
+        ctx = TraceContext.current()
+        if ctx is not None:
+            snapshot: dict[str, dict[str, Any]] = {}
+            if llm_provider_id:
+                snapshot["llm"] = {"provider_id": llm_provider_id}
+            if reranker_provider_id:
+                snapshot["reranker"] = {"provider_id": reranker_provider_id}
+                if rerank_profile_id:
+                    snapshot["reranker"]["rerank_profile_id"] = rerank_profile_id
+            ctx.providers_snapshot = snapshot
+        return QueryRuntime(
+            embedder=embedder,
+            vector_index=vector_index,
+            retriever=retriever,
+            sqlite=sqlite,
+            sparse_retriever=None,
+            fusion=None,
+            reranker=reranker,
+            llm=llm,
+            reranker_provider_id=reranker_provider_id,
+            rerank_profile_id=rerank_profile_id,
+        )
+
+    return build_rt, ids
 
 
 def _exec_case(case: Case, env: ProfileEnv, *, shared: dict[str, Any]) -> StepResult:
@@ -964,17 +1329,21 @@ def _exec_case(case: Case, env: ProfileEnv, *, shared: dict[str, Any]) -> StepRe
 
     # --- F: Eval Panel API ---
     if c == "F-01":
-        r = env.api_client().post("/api/eval/run", json={"hello": "world"})
+        r = env.api_client().post(
+            "/api/eval/run",
+            json={
+                "dataset_id": "__qa_missing_dataset__",
+                "strategy_config_id": env.strategy_config_id,
+                "top_k": 1,
+            },
+        )
         if r.status_code != 200:
             return _fail(f"http_{r.status_code}")
         j = r.json() or {}
         status = j.get("status")
-        if status not in {"stub", "ok", "error"}:
+        if status != "error":
             return _fail("unexpected_status")
-        # Newer API executes real eval run (status=ok) instead of pure stub.
-        if status == "ok" and not j.get("run_id"):
-            return _fail("missing_run_id")
-        if status == "error" and not j.get("reason"):
+        if not j.get("reason"):
             return _fail("missing_error_reason")
         return _pass()
 
@@ -1393,23 +1762,212 @@ def _exec_case(case: Case, env: ProfileEnv, *, shared: dict[str, Any]) -> StepRe
                 return _fail("cross_encoder_bad_order")
             return _pass()
         except Exception as e:
-            m = str(e).lower()
-            if (
-                "cross_encoder dependency missing" in m
-                or "no module named 'sentence_transformers'" in m
-                or "httpsconnectionpool" in m
-                or "connection error" in m
-                or "timed out" in m
-                or "name or service not known" in m
-                or "temporary failure in name resolution" in m
-                or "ssl" in m
-            ):
+            if _is_cross_encoder_env_unready(e):
                 return _blocked("cross_encoder:env_unready")
             return _fail(f"cross_encoder_integration_failed:{type(e).__name__}:{e}")
 
-    # --- K/L: provider switch / reranker ---
-    if c.startswith("K-") or c.startswith("L-"):
-        return _blocked("provider_switch:not_automated")
+    # --- K: provider switch / llm fallback ---
+    if c == "K-01":
+        env.activate()
+        from src.core.runners.query import QueryRunner
+
+        llm = _make_provider(
+            "llm",
+            "deepseek",
+            base_url="http://127.0.0.1:9/v1",
+            api_key="qa-invalid",
+            model="deepseek-chat",
+            timeout_s=0.2,
+        )
+        build_rt, _ = _make_fixed_query_runtime_builder(
+            work_dir=root / "data" / "qa_runs" / str(shared.get("run_id") or _now_run_id()) / env.name.lower() / "k01",
+            llm=llm,
+            llm_provider_id="deepseek",
+            empty_candidates=True,
+        )
+        resp = QueryRunner(runtime_builder=build_rt).run(
+            "provider switch assemble smoke",
+            strategy_config_id="local.test",
+            top_k=3,
+        )
+        if resp.trace is None:
+            return _fail("missing_trace")
+        llm_provider = ((resp.trace.providers or {}).get("llm") or {}).get("provider_id")
+        if llm_provider != "deepseek":
+            return _fail(f"llm_provider_not_switched:{llm_provider}")
+        if resp.sources:
+            return _fail("expected_empty_sources")
+        return StepResult(status="PASS", trace_id=resp.trace_id)
+
+    if c == "K-02":
+        env.activate()
+        from src.core.runners.query import QueryRunner
+
+        llm = _make_provider(
+            "llm",
+            "deepseek",
+            base_url="http://127.0.0.1:9/v1",
+            api_key="qa-invalid",
+            model="deepseek-chat",
+            timeout_s=0.2,
+        )
+        build_rt, _ = _make_fixed_query_runtime_builder(
+            work_dir=root / "data" / "qa_runs" / str(shared.get("run_id") or _now_run_id()) / env.name.lower() / "k02",
+            llm=llm,
+            llm_provider_id="deepseek",
+        )
+        resp = QueryRunner(runtime_builder=build_rt).run(
+            "What is the capital of France?",
+            strategy_config_id="local.test",
+            top_k=2,
+        )
+        if not resp.sources:
+            return _fail("empty_sources")
+        if "extractive fallback" not in (resp.content_md or ""):
+            return _fail("fallback_output_missing")
+        if resp.trace is None:
+            return _fail("missing_trace")
+        if ((resp.trace.providers or {}).get("llm") or {}).get("provider_id") != "deepseek":
+            return _fail("missing_deepseek_provider")
+        if not _trace_has_event(resp.trace, "stage.generate", "warn.generate_fallback"):
+            return _fail("missing_llm_fallback_event")
+        return StepResult(status="PASS", trace_id=resp.trace_id)
+
+    # --- L: reranker mode ---
+    if c == "L-01":
+        env.activate()
+        from src.core.runners.query import QueryRunner
+        from src.libs.providers.llm.fake_llm import FakeLLM
+
+        build_rt, ids = _make_fixed_query_runtime_builder(
+            work_dir=root / "data" / "qa_runs" / str(shared.get("run_id") or _now_run_id()) / env.name.lower() / "l01",
+            llm=FakeLLM(name="fake-llm"),
+        )
+        resp = QueryRunner(runtime_builder=build_rt).run(
+            "What is the capital of France?",
+            strategy_config_id="local.test",
+            top_k=2,
+        )
+        if not resp.sources:
+            return _fail("empty_sources")
+        if resp.sources[0].chunk_id != ids["irrelevant"]:
+            return _fail("expected_fusion_order")
+        if resp.trace is None:
+            return _fail("missing_trace")
+        if not _trace_has_event(resp.trace, "stage.rerank", "rerank.skipped"):
+            return _fail("missing_rerank_skipped")
+        if resp.trace.aggregates.get("effective_rank_source") != "fusion":
+            return _fail("missing_fusion_aggregate")
+        return StepResult(status="PASS", trace_id=resp.trace_id)
+
+    if c == "L-02":
+        env.activate()
+        from src.core.runners.query import QueryRunner
+        from src.libs.providers.llm.fake_llm import FakeLLM
+
+        server = None
+        try:
+            server_url, server = _start_fake_openai_chat_server(
+                '[{"chunk_id":"chk_paris","score":0.99},{"chunk_id":"chk_banana","score":0.01}]'
+            )
+            reranker = _make_provider(
+                "reranker",
+                "openai_compatible_llm",
+                base_url=server_url,
+                api_key="qa-local",
+                model="qwen3-rerank",
+                timeout_s=2.0,
+                max_candidates=2,
+                max_chunk_chars=120,
+            )
+
+            off_rt, ids = _make_fixed_query_runtime_builder(
+                work_dir=root / "data" / "qa_runs" / str(shared.get("run_id") or _now_run_id()) / env.name.lower() / "l02_off",
+                llm=FakeLLM(name="fake-llm"),
+            )
+            on_rt, _ = _make_fixed_query_runtime_builder(
+                work_dir=root / "data" / "qa_runs" / str(shared.get("run_id") or _now_run_id()) / env.name.lower() / "l02_on",
+                llm=FakeLLM(name="fake-llm"),
+                reranker=reranker,
+                reranker_provider_id="openai_compatible_llm",
+                rerank_profile_id="rerank.local_stub.v1",
+            )
+            runner_off = QueryRunner(runtime_builder=off_rt)
+            runner_on = QueryRunner(runtime_builder=on_rt)
+            resp_off = runner_off.run("What is the capital of France?", strategy_config_id="local.test", top_k=2)
+            resp_on = runner_on.run("What is the capital of France?", strategy_config_id="local.test", top_k=2)
+            if not resp_off.sources or not resp_on.sources:
+                return _fail("empty_sources")
+            if resp_off.sources[0].chunk_id != ids["irrelevant"]:
+                return _fail("baseline_not_fusion_order")
+            if resp_on.sources[0].chunk_id != ids["relevant"]:
+                return _fail("rerank_order_unchanged")
+            if resp_on.trace is None:
+                return _fail("missing_trace")
+            used = _last_trace_event(resp_on.trace, "stage.rerank", "rerank.used")
+            if used is None:
+                return _fail("missing_rerank_used")
+            if used.attrs.get("rerank_applied") is not True:
+                return _fail("rerank_not_applied")
+            if used.attrs.get("effective_rank_source") != "rerank":
+                return _fail("wrong_effective_rank_source")
+            return StepResult(status="PASS", trace_id=resp_on.trace_id)
+        finally:
+            if server is not None:
+                try:
+                    server.shutdown()
+                    server.server_close()
+                except Exception:
+                    pass
+
+    if c == "L-03":
+        env.activate()
+        from src.core.runners.query import QueryRunner
+        from src.libs.providers.llm.fake_llm import FakeLLM
+
+        reranker = _make_provider(
+            "reranker",
+            "openai_compatible_llm",
+            base_url="http://127.0.0.1:9/v1",
+            api_key="qa-invalid",
+            model="qwen3-rerank",
+            timeout_s=0.2,
+            max_candidates=2,
+            max_chunk_chars=120,
+        )
+        off_rt, ids = _make_fixed_query_runtime_builder(
+            work_dir=root / "data" / "qa_runs" / str(shared.get("run_id") or _now_run_id()) / env.name.lower() / "l03_off",
+            llm=FakeLLM(name="fake-llm"),
+        )
+        on_rt, _ = _make_fixed_query_runtime_builder(
+            work_dir=root / "data" / "qa_runs" / str(shared.get("run_id") or _now_run_id()) / env.name.lower() / "l03_on",
+            llm=FakeLLM(name="fake-llm"),
+            reranker=reranker,
+            reranker_provider_id="openai_compatible_llm",
+            rerank_profile_id="rerank.failover.v1",
+        )
+        runner_off = QueryRunner(runtime_builder=off_rt)
+        runner_on = QueryRunner(runtime_builder=on_rt)
+        resp_off = runner_off.run("What is the capital of France?", strategy_config_id="local.test", top_k=2)
+        resp_on = runner_on.run("What is the capital of France?", strategy_config_id="local.test", top_k=2)
+        if not resp_off.sources or not resp_on.sources:
+            return _fail("empty_sources")
+        if resp_off.sources[0].chunk_id != ids["irrelevant"]:
+            return _fail("baseline_not_fusion_order")
+        if resp_on.sources[0].chunk_id != resp_off.sources[0].chunk_id:
+            return _fail("fallback_did_not_preserve_order")
+        if resp_on.trace is None:
+            return _fail("missing_trace")
+        if not _trace_has_event(resp_on.trace, "stage.rerank", "warn.rerank_fallback"):
+            return _fail("missing_rerank_fallback")
+        used = _last_trace_event(resp_on.trace, "stage.rerank", "rerank.used")
+        if used is None:
+            return _fail("missing_rerank_used")
+        if used.attrs.get("rerank_failed") is not True:
+            return _fail("rerank_failed_flag_missing")
+        if used.attrs.get("effective_rank_source") != "fusion":
+            return _fail("wrong_effective_rank_source")
+        return StepResult(status="PASS", trace_id=resp_on.trace_id)
 
     # --- M: config tolerance ---
     if c == "M-01":
@@ -1737,6 +2295,8 @@ def _append_progress_cases(
         else:
             lines.append("- 预期：（未解析到预期摘要）")
         lines.append(f"- 执行结果：OFFLINE={_fmt_exec(cr.offline)}; REAL={_fmt_exec(cr.real)}; Overall={cr.overall}")
+        if cr.real and cr.real.diagnostic:
+            lines.append(f"- REAL报错详情：{_summarize_diagnostic(cr.real.diagnostic)}")
         if cr.note:
             lines.append(f"- 备注：{cr.note}")
         lines.append("")
@@ -2038,16 +2598,24 @@ def main(argv: list[str] | None = None) -> int:
         # OFFLINE
         if env_off is not None and "OFFLINE" in case.profiles:
             try:
+                env_off.activate()
                 cr.offline = _exec_case(case, env_off, shared=shared)
             except Exception as e:
                 cr.offline = StepResult(status="FAIL", error=f"exception:{type(e).__name__}:{e}")
         # REAL
         if env_real is not None and "REAL" in case.profiles:
+            location = f"run_baseline.py:main/_exec_case[{case.case_id}]"
             try:
+                env_real.activate()
                 if shared.get("_real_blocked"):
-                    cr.real = StepResult(
+                    cr.real = _attach_real_diagnostic(
+                        case,
+                        env_real,
+                        StepResult(
                         status="BLOCKED(env:network)",
                         error=str(shared.get("_real_blocked_reason") or "network_blocked"),
+                        ),
+                        location="run_baseline.py:main/preflight_dns",
                     )
                 else:
                     # Preflight DNS for REAL on first real case to surface env blockers early.
@@ -2070,16 +2638,38 @@ def main(argv: list[str] | None = None) -> int:
                         if not ok:
                             shared["_real_blocked"] = True
                             shared["_real_blocked_reason"] = f"dns_fail:{host}:{msg}"
-                            cr.real = StepResult(status="BLOCKED(env:network)", error=f"dns_fail:{host}:{msg}")
+                            cr.real = _attach_real_diagnostic(
+                                case,
+                                env_real,
+                                StepResult(status="BLOCKED(env:network)", error=f"dns_fail:{host}:{msg}"),
+                                location="run_baseline.py:main/preflight_dns",
+                            )
                         else:
-                            cr.real = _exec_case(case, env_real, shared=shared)
+                            cr.real = _attach_real_diagnostic(
+                                case,
+                                env_real,
+                                _exec_case(case, env_real, shared=shared),
+                                location=location,
+                            )
                     else:
-                        cr.real = _exec_case(case, env_real, shared=shared)
+                        cr.real = _attach_real_diagnostic(
+                            case,
+                            env_real,
+                            _exec_case(case, env_real, shared=shared),
+                            location=location,
+                        )
             except Exception as e:
-                cr.real = StepResult(status=_classify_real_error(str(e)), error=f"exception:{type(e).__name__}:{e}")
+                cr.real = _attach_real_diagnostic(
+                    case,
+                    env_real,
+                    StepResult(status=_classify_real_error(str(e)), error=f"exception:{type(e).__name__}:{e}"),
+                    location=location,
+                )
 
         cr.overall = _compute_overall(case, cr.offline, cr.real)
-        if (cr.offline and cr.offline.status.startswith("BLOCKED")) or (cr.real and cr.real.status.startswith("BLOCKED")):
+        if cr.real and (cr.real.status.startswith("BLOCKED") or cr.real.status.startswith("FAIL")):
+            cr.note = _summarize_diagnostic(cr.real.diagnostic) or (cr.real.error or "")
+        elif (cr.offline and cr.offline.status.startswith("BLOCKED")) or (cr.real and cr.real.status.startswith("BLOCKED")):
             cr.note = (cr.offline.error if cr.offline and cr.offline.error else "") or (cr.real.error if cr.real and cr.real.error else "")
         results.append(cr)
 
@@ -2092,4 +2682,13 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    exit_code = 1
+    try:
+        exit_code = int(main())
+    finally:
+        try:
+            sys.stdout.flush()
+            sys.stderr.flush()
+        except Exception:
+            pass
+    os._exit(exit_code)
