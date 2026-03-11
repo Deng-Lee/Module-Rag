@@ -4,7 +4,6 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from ..core.runners import IngestRunner, QueryRunner
 from ..core.strategy import load_settings
@@ -16,14 +15,26 @@ from ..observability.sinks.jsonl import JsonlSink
 from .errors import map_exception_to_jsonrpc
 from .jsonrpc import Dispatcher, JsonRpcRequest, StdioTransport
 from .mcp import McpProtocol, McpSession
-from .mcp.tools.delete_document import DeleteDocumentToolConfig, make_tool as make_delete_tool
-from .mcp.tools.get_document import GetDocumentToolConfig, make_tool as make_get_document_tool
-from .mcp.tools.ingest import IngestToolConfig, make_tool as make_ingest_tool
-from .mcp.tools.list_documents import ListDocumentsToolConfig, make_tool as make_list_tool
+from .mcp.tools.delete_document import DeleteDocumentToolConfig
+from .mcp.tools.delete_document import make_tool as make_delete_tool
+from .mcp.tools.get_document import GetDocumentToolConfig
+from .mcp.tools.get_document import make_tool as make_get_document_tool
+from .mcp.tools.ingest import IngestToolConfig
+from .mcp.tools.ingest import make_tool as make_ingest_tool
+from .mcp.tools.list_documents import ListDocumentsToolConfig
+from .mcp.tools.list_documents import make_tool as make_list_tool
 from .mcp.tools.ping import tool as ping_tool
-from .mcp.tools.query import QueryToolConfig, make_tool as make_query_tool
-from .mcp.tools.query_assets import QueryAssetsToolConfig, make_tool as make_query_assets_tool
+from .mcp.tools.query import QueryToolConfig
+from .mcp.tools.query import make_tool as make_query_tool
+from .mcp.tools.query_assets import QueryAssetsToolConfig
+from .mcp.tools.query_assets import make_tool as make_query_assets_tool
 from .mcp.tools.registry import ToolRegistry
+from .mcp.tools.summarize_document import (
+    SummarizeDocumentToolConfig,
+)
+from .mcp.tools.summarize_document import (
+    make_tool as make_summarize_document_tool,
+)
 
 
 @dataclass
@@ -55,10 +66,25 @@ def serve_stdio(settings_path: str | Path) -> None:
 
     # Core tools
     tools.register(ping_tool)
-    tools.register(make_ingest_tool(runner=IngestRunner(settings_path=settings_path), cfg=IngestToolConfig(settings_path=settings_path)))
-    tools.register(make_query_tool(runner=QueryRunner(settings_path=settings_path), cfg=QueryToolConfig(settings_path=settings_path)))
+    tools.register(
+        make_ingest_tool(
+            runner=IngestRunner(settings_path=settings_path),
+            cfg=IngestToolConfig(settings_path=settings_path),
+        )
+    )
+    tools.register(
+        make_query_tool(
+            runner=QueryRunner(settings_path=settings_path),
+            cfg=QueryToolConfig(settings_path=settings_path),
+        )
+    )
     tools.register(make_query_assets_tool(cfg=QueryAssetsToolConfig(settings_path=settings_path)))
     tools.register(make_get_document_tool(cfg=GetDocumentToolConfig(settings_path=settings_path)))
+    tools.register(
+        make_summarize_document_tool(
+            cfg=SummarizeDocumentToolConfig(settings_path=settings_path)
+        )
+    )
     tools.register(make_list_tool(cfg=ListDocumentsToolConfig(settings_path=settings_path)))
     tools.register(make_delete_tool(cfg=DeleteDocumentToolConfig(settings_path=settings_path)))
 

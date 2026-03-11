@@ -4,12 +4,29 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-FILE_PATH="${1:-}"
-STRATEGY_ID="${2:-local.default}"
-POLICY="${3:-new_version}"
+VERBOSE=0
+POSITIONAL=()
+for arg in "$@"; do
+  case "$arg" in
+    --verbose)
+      VERBOSE=1
+      ;;
+    -h|--help)
+      echo "usage: scripts/dev_ingest.sh <file_path> [strategy_config_id] [policy] [--verbose]"
+      exit 0
+      ;;
+    *)
+      POSITIONAL+=("$arg")
+      ;;
+  esac
+done
+
+FILE_PATH="${POSITIONAL[0]:-}"
+STRATEGY_ID="${POSITIONAL[1]:-local.default}"
+POLICY="${POSITIONAL[2]:-new_version}"
 
 if [[ -z "$FILE_PATH" ]]; then
-  echo "usage: scripts/dev_ingest.sh <file_path> [strategy_config_id] [policy]"
+  echo "usage: scripts/dev_ingest.sh <file_path> [strategy_config_id] [policy] [--verbose]"
   exit 2
 fi
 
@@ -18,7 +35,7 @@ if [[ ! -f "$FILE_PATH" ]]; then
   exit 2
 fi
 
-PYTHONPATH=. .venv/bin/python - "$FILE_PATH" "$STRATEGY_ID" "$POLICY" <<'PY'
+PYTHONPATH=. .venv/bin/python - "$FILE_PATH" "$STRATEGY_ID" "$POLICY" "$VERBOSE" <<'PY'
 import json
 import os
 import sys
@@ -32,6 +49,7 @@ from src.observability.obs import set_sink
 file_path = Path(sys.argv[1])
 strategy_id = sys.argv[2]
 policy = sys.argv[3]
+verbose = sys.argv[4] == "1"
 
 settings_path = os.environ.get("MODULE_RAG_SETTINGS_PATH", "config/settings.yaml")
 # Ensure observability sink writes traces for CLI runs
@@ -51,5 +69,30 @@ if isinstance(md_path, str):
     except Exception:
         pass
 print(json.dumps(structured, ensure_ascii=False, indent=2))
+if verbose:
+    trace = resp.trace
+    verbose_payload = {
+        "file_path": str(file_path),
+        "strategy_config_id": strategy_id,
+        "policy": policy,
+        "trace_id": resp.trace_id,
+        "status": structured.get("status"),
+        "structured": structured,
+        "providers": getattr(trace, "providers", {}) if trace is not None else {},
+        "aggregates": getattr(trace, "aggregates", {}) if trace is not None else {},
+        "spans": [
+            {
+                "span": getattr(span, "name", ""),
+                "event_kinds": [
+                    str(getattr(ev, "kind", "") or "")
+                    for ev in (getattr(span, "events", None) or [])
+                ],
+            }
+            for span in (getattr(trace, "spans", None) or [])
+        ],
+    }
+    print("=== VERBOSE DETAILS BEGIN ===")
+    print(json.dumps(verbose_payload, ensure_ascii=False, indent=2))
+    print("=== VERBOSE DETAILS END ===")
 print(f"trace_id: {resp.trace_id}")
 PY

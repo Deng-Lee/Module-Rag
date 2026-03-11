@@ -45,13 +45,15 @@ class RagasAdapter:
     base_url: str | None = None
     model: str | None = None
     embedding_model: str | None = None
+    embedding_api_key: str | None = None
+    embedding_base_url: str | None = None
     endpoint_key: str | None = None  # accepted for config compatibility (resolved upstream)
 
     def evaluate_case(self, case: Any, run_output: dict[str, Any]) -> EvalCaseResult:
         try:
+            from datasets import Dataset  # type: ignore
             from ragas import evaluate  # type: ignore
             from ragas.metrics import answer_relevancy, faithfulness  # type: ignore
-            from datasets import Dataset  # type: ignore
         except Exception:
             return EvalCaseResult(
                 case_id=_case_id(case),
@@ -113,14 +115,31 @@ class RagasAdapter:
             # methods like `embed_query` and `embed_documents`.
             emb_obj = None
             try:
-                if 'client' in locals():
-                    embedding_model = (
-                        self.embedding_model
-                        or os.environ.get('OPENAI_EMBEDDING_MODEL')
-                        or os.environ.get('OPENAI_MODEL')
-                        or 'text-embedding-3-small'
-                    )
+                embedding_client = None
+                embedding_model = (
+                    self.embedding_model
+                    or os.environ.get("OPENAI_EMBEDDING_MODEL")
+                    or os.environ.get("OPENAI_MODEL")
+                    or "text-embedding-3-small"
+                )
+                embedding_client_args: dict[str, str] = {}
+                if isinstance(self.embedding_api_key, str) and self.embedding_api_key:
+                    embedding_client_args["api_key"] = self.embedding_api_key
+                elif isinstance(self.api_key, str) and self.api_key:
+                    embedding_client_args["api_key"] = self.api_key
+                if isinstance(self.embedding_base_url, str) and self.embedding_base_url:
+                    embedding_client_args["base_url"] = self.embedding_base_url
+                elif isinstance(self.base_url, str) and self.base_url:
+                    embedding_client_args["base_url"] = self.base_url
 
+                if embedding_client_args:
+                    from openai import OpenAI  # type: ignore
+
+                    embedding_client = OpenAI(**embedding_client_args)
+                elif 'client' in locals():
+                    embedding_client = client
+
+                if embedding_client is not None:
                     class _RagasEmbeddings:
                         def __init__(self, client, model: str):
                             self._client = client
@@ -139,21 +158,41 @@ class RagasAdapter:
                         def embed(self, texts: list[str]):
                             return self.embed_documents(texts)
 
-                    emb_obj = _RagasEmbeddings(client, embedding_model)
+                    emb_obj = _RagasEmbeddings(embedding_client, embedding_model)
             except Exception:
                 emb_obj = None
 
             with _temp_env(env) if env else _temp_env({}):
                 if llm_obj is not None:
                     if emb_obj is not None:
-                        result = evaluate(dataset, metrics=[faithfulness, answer_relevancy], llm=llm_obj, embeddings=emb_obj, show_progress=False)
+                        result = evaluate(
+                            dataset,
+                            metrics=[faithfulness, answer_relevancy],
+                            llm=llm_obj,
+                            embeddings=emb_obj,
+                            show_progress=False,
+                        )
                     else:
-                        result = evaluate(dataset, metrics=[faithfulness, answer_relevancy], llm=llm_obj, show_progress=False)
+                        result = evaluate(
+                            dataset,
+                            metrics=[faithfulness, answer_relevancy],
+                            llm=llm_obj,
+                            show_progress=False,
+                        )
                 else:
                     if emb_obj is not None:
-                        result = evaluate(dataset, metrics=[faithfulness, answer_relevancy], embeddings=emb_obj, show_progress=False)
+                        result = evaluate(
+                            dataset,
+                            metrics=[faithfulness, answer_relevancy],
+                            embeddings=emb_obj,
+                            show_progress=False,
+                        )
                     else:
-                        result = evaluate(dataset, metrics=[faithfulness, answer_relevancy], show_progress=False)
+                        result = evaluate(
+                            dataset,
+                            metrics=[faithfulness, answer_relevancy],
+                            show_progress=False,
+                        )
         except Exception as exc:
             return EvalCaseResult(
                 case_id=_case_id(case),
@@ -167,7 +206,11 @@ class RagasAdapter:
                     "model": self.model or "",
                     "embedding_model": self.embedding_model or "",
                     "base_url": self.base_url or "",
-                    "hint": "set OPENAI_API_KEY (or configure evaluator api_key via model_endpoints)",
+                    "embedding_base_url": self.embedding_base_url or "",
+                    "hint": (
+                        "set OPENAI_API_KEY (or configure evaluator api_key via "
+                        "model_endpoints)"
+                    ),
                 },
             )
 
@@ -185,6 +228,7 @@ class RagasAdapter:
                 "ragas_metrics": list(extracted.keys()),
                 "model": self.model or "",
                 "embedding_model": self.embedding_model or "",
+                "embedding_base_url": self.embedding_base_url or "",
             },
         )
 

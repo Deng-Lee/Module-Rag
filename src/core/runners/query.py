@@ -151,7 +151,7 @@ def _build_query_runtime_from_settings(
         if reranker_provider_id not in {"noop", "reranker.noop"}:
             try:
                 reranker_ctor_params = dict(reranker_params or {})
-                # Observability/versioning metadata should stay in trace, not leak into provider ctors.
+                # Observability/versioning metadata stays in trace, not provider ctors.
                 reranker_ctor_params.pop("rerank_profile_id", None)
                 reranker = registry.create(
                     "reranker",
@@ -217,6 +217,17 @@ def _attach_providers_snapshot(
         profile_id = params.get("profile_id") or params.get("text_norm_profile_id")
         version = params.get("version") or params.get("model_version")
         meta = {"provider_id": provider_id}
+        model = (
+            params.get("model")
+            or params.get("model_name")
+            or params.get("deployment_name")
+            or params.get("embedding_model")
+        )
+        base_url = params.get("base_url")
+        if model:
+            meta["model"] = str(model)
+        if base_url:
+            meta["base_url"] = str(base_url)
         if profile_id:
             meta["profile_id"] = str(profile_id)
         if version:

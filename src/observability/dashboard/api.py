@@ -1,17 +1,16 @@
 from __future__ import annotations
 
+import json
 import os
+import time
 from typing import Any
 
 from fastapi import APIRouter, Request
 
 from ...core.runners import AdminRunner, EvalRunner, IngestRunner, QueryRunner
 from ...core.strategy import Settings
-from ...ingestion.stages.storage.sqlite import SqliteStore
 from ..readers.jsonl_reader import JsonlReader
-from ..readers.sqlite_reader import SqliteTraceReader
 from .deps import get_settings, get_sqlite_store, get_trace_reader
-
 
 router = APIRouter(prefix="/api")
 
@@ -147,7 +146,13 @@ def list_traces(
         })
 
     # Order: error traces first, then by start_ts desc
-    enriched.sort(key=lambda x: ((1 if x.get("has_error") else 0), float(x.get("start_ts") or 0.0)), reverse=True)
+    enriched.sort(
+        key=lambda x: (
+            (1 if x.get("has_error") else 0),
+            float(x.get("start_ts") or 0.0),
+        ),
+        reverse=True,
+    )
 
     # Apply offset/limit after ordering
     items = enriched[offset : offset + limit]
@@ -168,7 +173,14 @@ def get_trace(request: Request, trace_id: str) -> dict[str, Any]:
         return {"error": "not_found", "trace_id": trace_id}
     # Return trace envelope plus highlighted error events for quick review in dashboard
     env_dict = env.to_dict()
-    error_kinds = {"stage.error", "error", "embedder.http_error", "embedder.request_error", "llm.http_error", "llm.request_error"}
+    error_kinds = {
+        "stage.error",
+        "error",
+        "embedder.http_error",
+        "embedder.request_error",
+        "llm.http_error",
+        "llm.request_error",
+    }
     highlighted: list[dict[str, Any]] = []
 
     # scan spans' events
@@ -306,7 +318,7 @@ def post_query(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
 
 @router.post("/delete")
 def post_delete(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
-    settings = get_settings(request)
+    _ = get_settings(request)
     doc_id = payload.get("doc_id")
     version_id = payload.get("version_id")
     mode = payload.get("mode", "soft")
@@ -317,7 +329,12 @@ def post_delete(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
         mode = "soft"
     settings_path = os.environ.get("MODULE_RAG_SETTINGS_PATH", "config/settings.yaml")
     runner = AdminRunner(settings_path=settings_path)
-    res = runner.delete_document(doc_id=doc_id, version_id=version_id, mode=str(mode), dry_run=dry_run)
+    res = runner.delete_document(
+        doc_id=doc_id,
+        version_id=version_id,
+        mode=str(mode),
+        dry_run=dry_run,
+    )
     return {"status": res.status, "trace_id": res.trace_id, "affected": res.affected}
 
 
@@ -331,7 +348,10 @@ def post_run_eval(request: Request, payload: dict[str, Any] | None = None) -> di
     judge_strategy_id = payload.get("judge_strategy_id")
 
     try:
-        runner = EvalRunner(settings_path=os.environ.get("MODULE_RAG_SETTINGS_PATH", "config/settings.yaml"), settings=settings)
+        runner = EvalRunner(
+            settings_path=os.environ.get("MODULE_RAG_SETTINGS_PATH", "config/settings.yaml"),
+            settings=settings,
+        )
         result = runner.run(
             dataset_id=str(dataset_id),
             strategy_config_id=str(strategy_config_id),
@@ -344,7 +364,10 @@ def post_run_eval(request: Request, payload: dict[str, Any] | None = None) -> di
             "dataset_id": result.dataset_id,
             "strategy_config_id": result.strategy_config_id,
             "metrics": result.metrics,
-            "cases": [{"case_id": c.case_id, "trace_id": c.trace_id, "metrics": c.metrics} for c in result.cases],
+            "cases": [
+                {"case_id": c.case_id, "trace_id": c.trace_id, "metrics": c.metrics}
+                for c in result.cases
+            ],
         }
     except Exception as exc:
         return {"status": "error", "reason": str(exc)}
@@ -359,5 +382,32 @@ def list_eval_runs(request: Request, limit: int = 50, offset: int = 0) -> dict[s
 
 
 @router.get("/eval/trends")
-def eval_trends(_: Request, metric: str = "hit_rate@k", window: int = 30) -> dict[str, Any]:
-    return {"metric": metric, "window": window, "points": []}
+def eval_trends(request: Request, metric: str = "hit_rate@k", window: int = 30) -> dict[str, Any]:
+    settings = get_settings(request)
+    sqlite = get_sqlite_store(settings)
+    runs = sqlite.list_eval_runs(limit=max(1, int(window)), offset=0)
+    now_ts = time.time()
+    min_ts = now_ts - max(1, int(window)) * 86400
+
+    points: list[dict[str, Any]] = []
+    for item in reversed(runs):
+        created_at = float(item.get("created_at") or 0.0)
+        if created_at and created_at < min_ts:
+            continue
+        metrics = {}
+        try:
+            metrics = json.loads(str(item.get("metrics_json") or "{}"))
+        except Exception:
+            metrics = {}
+        value = metrics.get(metric)
+        if isinstance(value, (int, float)):
+            points.append(
+                {
+                    "run_id": item.get("run_id"),
+                    "dataset_id": item.get("dataset_id"),
+                    "strategy_config_id": item.get("strategy_config_id"),
+                    "created_at": created_at,
+                    "value": float(value),
+                }
+            )
+    return {"metric": metric, "window": window, "points": points}

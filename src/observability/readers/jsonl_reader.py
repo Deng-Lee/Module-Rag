@@ -62,7 +62,13 @@ class JsonlReader:
                 line = line.strip()
                 if not line:
                     continue
-                data = json.loads(line)
+                try:
+                    data = json.loads(line)
+                except Exception:
+                    continue
                 if not isinstance(data, dict):
                     continue
-                yield _envelope_from_dict(data)
+                try:
+                    yield _envelope_from_dict(data)
+                except Exception:
+                    continue

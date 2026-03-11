@@ -29,3 +29,33 @@ paths:
     assert str(s.paths.raw_dir).endswith("/data/raw")
     assert str(s.paths.logs_dir).endswith("/logs")
 
+
+def test_load_settings_qa_file_skips_implicit_local_override(tmp_path: Path) -> None:
+    repo = tmp_path
+    config_dir = repo / "config"
+    config_dir.mkdir(parents=True)
+
+    settings_yaml = config_dir / "settings.qa.demo.yaml"
+    settings_yaml.write_text(
+        """
+providers:
+  reranker:
+    provider_id: openai_compatible_llm
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    (config_dir / "local.override.yaml").write_text(
+        """
+providers:
+  reranker:
+    provider_id: openai_compatible_vision
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    s = load_settings(settings_yaml)
+    assert ((s.raw.get("providers") or {}).get("reranker") or {}).get("provider_id") == (
+        "openai_compatible_llm"
+    )

@@ -39,13 +39,16 @@ def test_mcp_query_assets_and_get_document_over_stdio(tmp_path: Path, tmp_workdi
     _write_settings_yaml(settings_path, data_dir=data_dir)
 
     # Build a markdown that references a local image.
-    fixtures_dir = Path(__file__).resolve().parents[1] / "fixtures"
-    img_src = fixtures_dir / "assets" / "sample.svg"
-    img_path = tmp_path / "sample.svg"
+    fixtures_dir = Path(__file__).resolve().parents[1] / "fixtures" / "sample_documents"
+    img_src = fixtures_dir / "test_vision_llm.jpg"
+    img_path = tmp_path / "sample.jpg"
     img_path.write_bytes(img_src.read_bytes())
 
     md_path = tmp_path / "doc.md"
-    md_path.write_text(f"# Title\n\nHere is an image: ![alt]({img_path.as_posix()})\n", encoding="utf-8")
+    md_path.write_text(
+        f"# Title\n\nHere is an image: ![alt]({img_path.as_posix()})\n",
+        encoding="utf-8",
+    )
 
     env = dict(os.environ)
     env["MODULE_RAG_SETTINGS_PATH"] = str(settings_path)
@@ -118,7 +121,10 @@ def test_mcp_query_assets_and_get_document_over_stdio(tmp_path: Path, tmp_workdi
                 "jsonrpc": "2.0",
                 "id": 3,
                 "method": "tools/call",
-                "params": {"name": "library_query_assets", "arguments": {"asset_ids": asset_ids, "max_bytes": 200000}},
+                "params": {
+                    "name": "library_query_assets",
+                    "arguments": {"asset_ids": asset_ids, "max_bytes": 200000},
+                },
             },
             ensure_ascii=False,
         )
@@ -140,6 +146,22 @@ def test_mcp_query_assets_and_get_document_over_stdio(tmp_path: Path, tmp_workdi
         )
         + "\n"
     )
+    # 5) summarize_document
+    p.stdin.write(
+        json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 5,
+                "method": "tools/call",
+                "params": {
+                    "name": "library_summarize_document",
+                    "arguments": {"doc_id": doc_id, "version_id": version_id, "max_chars": 200},
+                },
+            },
+            ensure_ascii=False,
+        )
+        + "\n"
+    )
     p.stdin.flush()
     p.stdin.close()
 
@@ -147,12 +169,25 @@ def test_mcp_query_assets_and_get_document_over_stdio(tmp_path: Path, tmp_workdi
     assert out3["id"] == 3
     res3 = out3["result"]["structuredContent"]["structured"]
     assets = res3.get("assets")
-    assert isinstance(assets, list) and assets
-    assert "bytes_b64" in assets[0]
+    missing = res3.get("missing")
+    assert isinstance(assets, list)
+    assert isinstance(missing, list)
+    assert "variant" in res3
+    assert "max_bytes" in res3
+    if assets:
+        assert "bytes_b64" in assets[0]
 
     out4 = json.loads(p.stdout.readline().strip())
     assert out4["id"] == 4
     text = out4["result"]["content"][0]["text"]
     assert "asset://" in text  # image link is normalized
+
+    out5 = json.loads(p.stdout.readline().strip())
+    assert out5["id"] == 5
+    summary = out5["result"]["content"][0]["text"]
+    structured5 = out5["result"]["structuredContent"]["structured"]
+    assert structured5["doc_id"] == doc_id
+    assert structured5["version_id"] == version_id
+    assert "title" in summary.lower() or "image" in summary.lower()
 
     p.terminate()

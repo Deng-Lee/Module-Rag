@@ -3,17 +3,23 @@ from __future__ import annotations
 import os
 
 from src.core.runners import IngestRunner, QueryRunner
-from src.mcp_server.jsonrpc import Dispatcher, JsonRpcRequest, StdioTransport
 from src.mcp_server.errors import map_exception_to_jsonrpc
+from src.mcp_server.jsonrpc import Dispatcher, JsonRpcRequest, StdioTransport
 from src.mcp_server.mcp import McpProtocol, McpSession
-from src.mcp_server.mcp.tools.get_document import make_tool as make_get_document_tool
 from src.mcp_server.mcp.tools.get_document import GetDocumentToolConfig
+from src.mcp_server.mcp.tools.get_document import make_tool as make_get_document_tool
 from src.mcp_server.mcp.tools.ingest import make_tool as make_ingest_tool
 from src.mcp_server.mcp.tools.ping import tool as ping_tool
 from src.mcp_server.mcp.tools.query import make_tool as make_query_tool
-from src.mcp_server.mcp.tools.query_assets import make_tool as make_query_assets_tool
 from src.mcp_server.mcp.tools.query_assets import QueryAssetsToolConfig
+from src.mcp_server.mcp.tools.query_assets import make_tool as make_query_assets_tool
 from src.mcp_server.mcp.tools.registry import ToolRegistry
+from src.mcp_server.mcp.tools.summarize_document import (
+    SummarizeDocumentToolConfig,
+)
+from src.mcp_server.mcp.tools.summarize_document import (
+    make_tool as make_summarize_document_tool,
+)
 
 
 def main() -> None:
@@ -26,6 +32,11 @@ def main() -> None:
     tools.register(make_query_tool(runner=QueryRunner(settings_path=settings_path)))
     tools.register(make_query_assets_tool(cfg=QueryAssetsToolConfig(settings_path=settings_path)))
     tools.register(make_get_document_tool(cfg=GetDocumentToolConfig(settings_path=settings_path)))
+    tools.register(
+        make_summarize_document_tool(
+            cfg=SummarizeDocumentToolConfig(settings_path=settings_path)
+        )
+    )
 
     proto = McpProtocol(tools=tools)
 

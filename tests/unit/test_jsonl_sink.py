@@ -47,3 +47,18 @@ def test_jsonl_reader_iter_traces(tmp_path: Path) -> None:
     assert len(traces) == 1
     assert traces[0].trace_id == "t-3"
 
+
+def test_jsonl_reader_skips_invalid_lines(tmp_path: Path) -> None:
+    path = tmp_path / "traces.jsonl"
+    sink = JsonlSink(path)
+
+    env1 = _make_envelope("t-good")
+    sink.write(env1)
+    with path.open("a", encoding="utf-8") as f:
+        f.write("broken line\n")
+        f.write("{\"trace_id\":\"missing_fields\"}\n")
+
+    reader = JsonlReader(path)
+    traces = list(reader.iter_traces())
+    assert len(traces) == 1
+    assert traces[0].trace_id == "t-good"

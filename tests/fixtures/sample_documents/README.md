@@ -4,7 +4,7 @@ This directory contains sample documents used for testing the RAG pipeline.
 
 ## Contents
 
-- `sample.txt` - A minimal text document for basic testing
+- `sample.txt` - A minimal plain-text sample used for negative tests; the default ingest pipeline does not load `.txt`
 
 ## Usage
 

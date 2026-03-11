@@ -172,12 +172,16 @@ def load_settings(path: str | Path) -> Settings:
     raw = _load_yaml_mapping(p)
 
     # Optional private overrides (not committed). Controlled by env or default path.
+    # For generated QA settings (`settings.qa.*.yaml`), skip implicit local overrides so
+    # isolated runs are not polluted by developer-local experiments unless explicitly opted in.
     override_path = os.environ.get("MODULE_RAG_SECRETS_PATH")
     if override_path:
         ov = Path(override_path).expanduser()
+    elif p.name.startswith("settings.qa."):
+        ov = None
     else:
         ov = (p.parent / "local.override.yaml").resolve()
-    if ov.exists() and ov.is_file():
+    if ov is not None and ov.exists() and ov.is_file():
         raw_override = _load_yaml_mapping(ov)
         raw = _deep_merge(raw, raw_override)
 

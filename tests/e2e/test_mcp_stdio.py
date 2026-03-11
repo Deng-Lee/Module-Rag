@@ -100,6 +100,7 @@ def test_mcp_stdio_full_tools(tmp_path: Path, tmp_workdir: Path) -> None:
             "library_query",
             "library_query_assets",
             "library_get_document",
+            "library_summarize_document",
             "library_list_documents",
             "library_delete_document",
             "library_ping",
@@ -127,7 +128,10 @@ def test_mcp_stdio_full_tools(tmp_path: Path, tmp_workdir: Path) -> None:
                 "jsonrpc": "2.0",
                 "id": 3,
                 "method": "tools/call",
-                "params": {"name": "library_query", "arguments": {"query": "hello world", "top_k": 3}},
+                "params": {
+                    "name": "library_query",
+                    "arguments": {"query": "hello world", "top_k": 3},
+                },
             },
         )
         sc = out["result"]["structuredContent"]
@@ -146,7 +150,10 @@ def test_mcp_stdio_full_tools(tmp_path: Path, tmp_workdir: Path) -> None:
                 "jsonrpc": "2.0",
                 "id": 4,
                 "method": "tools/call",
-                "params": {"name": "library_query_assets", "arguments": {"asset_ids": asset_ids[:1]}},
+                "params": {
+                    "name": "library_query_assets",
+                    "arguments": {"asset_ids": asset_ids[:1]},
+                },
             },
         )
         assets = out["result"]["structuredContent"]["structured"]["assets"]
@@ -167,6 +174,25 @@ def test_mcp_stdio_full_tools(tmp_path: Path, tmp_workdir: Path) -> None:
         )
         assert out["result"]["content"][0]["type"] == "text"
 
+        # summarize_document
+        out = _jsonrpc_call(
+            p,
+            {
+                "jsonrpc": "2.0",
+                "id": 51,
+                "method": "tools/call",
+                "params": {
+                    "name": "library_summarize_document",
+                    "arguments": {"doc_id": doc_id, "version_id": version_id, "max_chars": 240},
+                },
+            },
+        )
+        summary_text = out["result"]["content"][0]["text"]
+        structured = out["result"]["structuredContent"]["structured"]
+        assert structured["doc_id"] == doc_id
+        assert structured["version_id"] == version_id
+        assert "hello world" in summary_text.lower()
+
         # list_documents
         out = _jsonrpc_call(
             p,
@@ -174,7 +200,10 @@ def test_mcp_stdio_full_tools(tmp_path: Path, tmp_workdir: Path) -> None:
                 "jsonrpc": "2.0",
                 "id": 6,
                 "method": "tools/call",
-                "params": {"name": "library_list_documents", "arguments": {"include_deleted": True}},
+                "params": {
+                    "name": "library_list_documents",
+                    "arguments": {"include_deleted": True},
+                },
             },
         )
         items = out["result"]["structuredContent"]["structured"]["items"]
@@ -199,7 +228,10 @@ def test_mcp_stdio_full_tools(tmp_path: Path, tmp_workdir: Path) -> None:
                 "jsonrpc": "2.0",
                 "id": 8,
                 "method": "tools/call",
-                "params": {"name": "library_query", "arguments": {"query": "hello world", "top_k": 3}},
+                "params": {
+                    "name": "library_query",
+                    "arguments": {"query": "hello world", "top_k": 3},
+                },
             },
         )
         sc = out["result"].get("structuredContent", {})
