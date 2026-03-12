@@ -34,40 +34,12 @@ def _render_run_block(payload: dict[str, Any]) -> str:
         "",
         "**用例结果**",
         "",
-        "| 用例ID | 标题 | 状态 | 执行入口 | 关键证据 | 失败链路 |",
-        "|---|---|---|---|---|---|",
+        "| Status | ID | Title | Note |",
+        "|---|---|---|---|",
     ]
     for case in cases:
-        evidence = case.get("evidence") or {}
-        ev_parts: list[str] = []
-        for key in (
-            "file",
-            "query",
-            "trace_id",
-            "run_id",
-            "doc_id",
-            "deleted_doc_id",
-            "top_chunk_id",
-        ):
-            if evidence.get(key) is not None:
-                ev_parts.append(f"{key}={evidence.get(key)}")
-        failure = case.get("failure") or {}
-        fail_text = ""
-        if failure.get("stage") or failure.get("raw_error"):
-            fail_text = " / ".join(
-                [
-                    str(failure.get("stage") or ""),
-                    str(failure.get("provider_model") or ""),
-                    str(failure.get("raw_error") or ""),
-                ]
-            ).strip(" /")
-        evidence_text = "; ".join(ev_parts) or "-"
         lines.append(
-            (
-                f"| {case.get('case_id')} | {case.get('title')} | {case.get('status')} | "
-                f"{case.get('entry')} | "
-                f"{evidence_text} | {fail_text or '-'} |"
-            )
+            f"| {case.get('status')} | {case.get('case_id')} | {case.get('title')} | {_render_note(case)} |"
         )
     compare = payload.get("compare") or {}
     if compare:
@@ -113,6 +85,43 @@ def _render_run_block(payload: dict[str, Any]) -> str:
     else:
         lines.append("- 当前 `v1` 自动化覆盖已通过，可继续扩展新的 REAL profile 或新的专项用例。")
     return "\n".join(lines) + "\n"
+
+
+def _render_note(case: dict[str, Any]) -> str:
+    entry = str(case.get("entry") or "").strip()
+    evidence = case.get("evidence") or {}
+    failure = case.get("failure") or {}
+    parts: list[str] = []
+    if entry:
+        parts.append(f"entry={entry}")
+    for key in (
+        "file",
+        "query",
+        "trace_id",
+        "run_id",
+        "doc_id",
+        "deleted_doc_id",
+        "top_chunk_id",
+        "top_doc_id",
+        "metric_keys",
+        "case_count",
+    ):
+        value = evidence.get(key)
+        if value is None or value == "":
+            continue
+        if isinstance(value, list):
+            rendered = ", ".join(str(item) for item in value[:4])
+        else:
+            rendered = str(value)
+        parts.append(f"{key}={rendered}")
+    for key in ("stage", "location", "provider_model", "raw_error", "fallback"):
+        value = failure.get(key)
+        if value:
+            parts.append(f"{key}={value}")
+    if not parts and evidence:
+        for key, value in list(evidence.items())[:4]:
+            parts.append(f"{key}={value}")
+    return "; ".join(parts) or "-"
 
 
 def _update_header(existing: str, payload: dict[str, Any]) -> str:

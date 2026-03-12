@@ -35,7 +35,7 @@ providers:
     provider_id: ragas
     params:
       endpoint_key: qwen
-      model: qwen-turbo
+      model: qwen3.5-plus
       embedding_model: text-embedding-v3
   vector_index:
     provider_id: vector.chroma

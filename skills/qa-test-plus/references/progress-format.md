@@ -7,6 +7,11 @@
 - 失败卡在什么环节、哪个模型、是否触发 fallback
 - 下一步该怎么继续
 
+同时它还承担“断点续跑”作用：
+- 已成功且证据完整的 case，下一轮不需要默认重跑
+- 未成功的 case，必须能从进度文档里直接看到失败摘要并单独重跑
+- 所以下一轮执行时，默认是“重跑失败项”，不是“整套从头再跑”
+
 ## 顶部摘要格式
 
 文件顶部固定保留一段摘要：
@@ -41,10 +46,10 @@
 - PASS=<n> | FAIL=<n> | BLOCKED=<n> | TOTAL=<n>
 
 **用例结果**
-| 用例ID | 标题 | 状态 | 执行入口 | 关键证据 | 失败链路 |
-|---|---|---|---|---|---|
-| B-01 | 摄取 simple.pdf | PASS | CLI 摄取 | file=simple.pdf; trace_id=...; doc_id=... | - |
-| D-01 | 运行 rag_eval_small | FAIL | CLI 评估 | run_id=...; metric_keys=... | eval / evaluator::qwen-turbo / 429 quota exceeded |
+| Status | ID | Title | Note |
+|---|---|---|---|
+| PASS | B-01 | 摄取 simple.pdf | entry=CLI 摄取; file=simple.pdf; trace_id=...; doc_id=... |
+| FAIL | D-01 | 运行 rag_eval_small | entry=CLI 评估; run_id=...; metric_keys=...; stage=eval; provider_model=evaluator::qwen3.5-plus; raw_error=429 quota exceeded |
 
 **Profile 对比**
 - 参与策略: local.default, local.production_like
@@ -60,7 +65,27 @@
 - 若有失败: 列出 1-3 条最直接的修复动作
 ```
 
-## 关键证据字段建议
+如果是“失败项重跑”，允许追加一个更小的区块：
+
+```md
+### Retry <run_id>
+
+**重跑范围**
+- 来源运行: <上一次 run_id>
+- 仅重跑用例: D-10, J-07
+
+**重跑结果**
+| Status | ID | Title | Note |
+|---|---|---|---|
+| PASS | D-10 | 使用 ragas evaluator 进行 CLI 评估 | prev=FAIL; run_id=...; metric_keys=ragas.faithfulness, ragas.answer_relevancy |
+| PASS | J-07 | Ragas / Judge 使用 DeepSeek | prev=FAIL; run_id=...; model=deepseek-chat; trace_id=... |
+
+**结论**
+- 仍失败的 case: <若无则写 none>
+- 下一轮默认仅继续重跑仍失败项
+```
+
+## Note 字段建议
 
 优先展示这些字段：
 - `file`
@@ -71,7 +96,27 @@
 - `deleted_doc_id`
 - `top_chunk_id`
 
-不要把整段 JSON 直接塞进表格；表格只放高信息密度的证据。
+不要把整段 JSON 直接塞进表格；`Note` 只放高信息密度的具体值。
+每条 `Note` 至少包含 2 个来自实际输出的具体值。
+对于已成功 case，优先回填：
+- `trace_id`
+- `run_id`
+- `doc_id`
+- `metric_keys`
+- 关键 provider/model
+
+## Note 格式
+
+统一写成：
+
+```text
+<key_1>=<value_1>; <key_2>=<value_2>; ...
+```
+
+示例：
+- `entry=CLI 摄取; trace_id=trace_xxx; doc_id=doc_xxx; file=simple.pdf`
+- `entry=CLI 评估; run_id=abc; metric_keys=ragas.faithfulness, ragas.answer_relevancy`
+- `entry=CLI 查询; stage=eval; provider_model=evaluator::qwen3.5-plus; raw_error=429 insufficient_quota`
 
 ## 失败链路格式
 

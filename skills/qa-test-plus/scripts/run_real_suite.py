@@ -1902,7 +1902,7 @@ def main() -> int:
                 "evaluator": {
                     "provider_id": "ragas",
                     "params": {
-                        "model": "qwen-turbo",
+                        "model": "qwen3.5-plus",
                         "embedding_model": "text-embedding-v3",
                         "base_url": "http://127.0.0.1:9/v1",
                         "api_key": "qa-plus-key",
@@ -2185,7 +2185,7 @@ def main() -> int:
                     "provider_id": "ragas",
                     "params": {
                         "endpoint_key": "qwen",
-                        "model": "qwen-turbo",
+                        "model": "qwen3.5-plus",
                         "embedding_model": "text-embedding-v3",
                     },
                 },

@@ -7,6 +7,11 @@ from typing import Any
 
 from ...interfaces.evaluator.evaluator import EvalCaseResult
 
+_MAX_RAGAS_QUERY_CHARS = 240
+_MAX_RAGAS_ANSWER_CHARS = 320
+_MAX_RAGAS_CONTEXTS = 2
+_MAX_RAGAS_CONTEXT_CHARS = 400
+
 
 def _safe_float(value: Any) -> float:
     try:
@@ -64,11 +69,16 @@ class RagasAdapter:
                     "reason": "ragas_not_installed",
                 },
             )
-        query = _case_query(case)
-        answer = run_output.get("answer") or ""
+        query = _clip_text(_case_query(case), _MAX_RAGAS_QUERY_CHARS)
+        answer = _clip_text(run_output.get("answer") or "", _MAX_RAGAS_ANSWER_CHARS)
         contexts = run_output.get("retrieved_texts") or []
         if not isinstance(contexts, list):
             contexts = [str(contexts)]
+        contexts = [
+            _clip_text(str(text), _MAX_RAGAS_CONTEXT_CHARS)
+            for text in contexts[:_MAX_RAGAS_CONTEXTS]
+            if str(text).strip()
+        ]
         expected_answer = _case_expected_answer(case)
 
         payload: dict[str, Any] = {
@@ -207,6 +217,10 @@ class RagasAdapter:
                     "embedding_model": self.embedding_model or "",
                     "base_url": self.base_url or "",
                     "embedding_base_url": self.embedding_base_url or "",
+                    "query_chars": len(query),
+                    "answer_chars": len(answer),
+                    "context_count": len(contexts),
+                    "context_chars": [len(item) for item in contexts],
                     "hint": (
                         "set OPENAI_API_KEY (or configure evaluator api_key via "
                         "model_endpoints)"
@@ -229,6 +243,10 @@ class RagasAdapter:
                 "model": self.model or "",
                 "embedding_model": self.embedding_model or "",
                 "embedding_base_url": self.embedding_base_url or "",
+                "query_chars": len(query),
+                "answer_chars": len(answer),
+                "context_count": len(contexts),
+                "context_chars": [len(item) for item in contexts],
             },
         )
 
@@ -260,6 +278,13 @@ def _extract_ragas_scores(result: Any) -> dict[str, Any]:
         except Exception:
             pass
     return {}
+
+
+def _clip_text(text: Any, limit: int) -> str:
+    value = str(text or "").strip()
+    if len(value) <= limit:
+        return value
+    return value[: limit - 1].rstrip() + "…"
 
 
 def _case_id(case: Any) -> str:

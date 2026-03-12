@@ -173,7 +173,7 @@ def write_real_settings(
                 "provider_id": "ragas",
                 "params": {
                     "endpoint_key": "qwen",
-                    "model": "qwen-turbo",
+                    "model": "qwen3.5-plus",
                     "embedding_model": "text-embedding-v3",
                 },
             },
