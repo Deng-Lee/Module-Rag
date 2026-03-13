@@ -4,10 +4,38 @@
 
 - 用例池总数: 100
 - 当前自动化覆盖: 100
-- 最新运行: 20260312_105812 (正式全量回归中止)
-- 最近一次执行统计: PASS=2 | FAIL=0 | BLOCKED=0 | TOTAL=2 (D-10/J-07 重跑)
+- 最新运行: 20260312_155947 (正式全量回归中止)
+- 最近一次执行统计: PASS=0 | FAIL=1 | BLOCKED=0 | TOTAL=100 (正式全量回归未完成)
 
 ## 运行记录
+
+### Run 20260312_155947
+
+**执行配置**
+- 策略: `local.production_like`
+- settings: `config/settings.qa.plus.20260312_155947.main.yaml`
+- 结果文件: `未生成（正式全量回归在 ragas evaluator 超时后中止）`
+
+**执行总览**
+- 自动化执行用例数: 未完成
+- PASS=未汇总 | FAIL=未汇总 | BLOCKED=未汇总 | TOTAL=100
+
+**用例结果**
+| Status | ID | Title | Note |
+|---|---|---|---|
+| FAIL | D/J-长尾 | 全量 REAL 回归尾段 | entry=正式全量回归; run_root=data/qa_plus_runs/20260312_155947; stage=eval; provider_model=evaluator::ragas::qwen3.5-plus/deepseek-chat; raw_error=APITimeoutError(Request timed out.) |
+
+**失败诊断**
+- 阶段: `eval`
+- 位置: `ragas.executor`
+- 模型: `evaluator::ragas::qwen3.5-plus` 与 `evaluator::ragas::deepseek-chat`
+- fallback: 无；主现象是 `LLM returned 1 generations instead of requested 3` 后进入 `APITimeoutError(Request timed out.)`
+- 伴随环境噪音: Qwen embedding 还出现过 `Connection reset by peer`
+
+**下一步**
+- 不再重跑整套已走过的前半段
+- 只围绕 `D/J` 相关 evaluator 长尾做专项重跑或继续收敛 provider 超时参数
+
 
 ### Run 20260312_105812
 
