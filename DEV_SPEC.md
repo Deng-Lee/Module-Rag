@@ -3553,6 +3553,11 @@ Storage 层模块设计（摘要）
 * Chroma：保存向量索引（`chunk_id -> vector + metadata`）；
 * SQLite FTS5：保存稀疏/BM25 索引（`chunk_id -> sparse terms`）。
 
+补充（FTS5 vs Sidecar 的实际落库形态）：
+
+* FTS5（`fts.sqlite`）：仅存 `chunk_id + text`；其中 `text = chunk_retrieval_text`，由 `chunk_text + 可选增强片段` 组装，可选增强包括 OCR/Caption/Keywords/Summary/标题原文（由配置决定）。
+* Sidecar（`app.sqlite`）：存事实层 `chunk_text`；存全部结构化元数据（`doc_id/version_id/section_path/tags/page_range...`）；存资产映射关系（`asset_id、anchors`）。
+
 Libs 可插拔抽象层（摘要）
 
 * `ProviderRegistry`：provider 注册与发现；
