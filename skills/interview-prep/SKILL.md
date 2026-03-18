@@ -17,6 +17,7 @@ description: "针对 Modular RAG MCP Server 项目的模拟技术面试 Agent。
 1. `references/project_knowledge.md` — 各模块实现细节、技术要点与评估标准
 2. `references/question_bank.md` — 三方向完整题库，面试时按随机规则从中选题
 3. `references/report_template.md` — **仅在 Phase 3 生成报告时读取**，包含完整报告模板、参考答案和评分细则
+4. `references/resume.md` — 这个系统在简历上的描述，面试时结合简历上陈述的内容和数据进行提问
 
 ---
 

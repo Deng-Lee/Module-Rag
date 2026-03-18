@@ -31,11 +31,13 @@ from qa_plus_common import (
     merged_provider_specs,
     now_run_id,
     preflight_real,
+    retry_call,
     safe_metric_dict,
     settings_path_for,
     strategy_path_for,
     summary_counts,
     traces_have_event,
+    wrap_runner,
     write_real_settings,
     write_strategy_yaml,
 )
@@ -61,11 +63,18 @@ def _failure_from_exc(
     exc: Exception,
     fallback: str = "not_triggered",
 ) -> FailureInfo:
+    raw_error = f"{type(exc).__name__}: {exc}"
+    retry_attempts = getattr(exc, "qa_retry_attempts", None)
+    retry_operation = getattr(exc, "qa_retry_operation", None)
+    if isinstance(retry_attempts, int) and retry_attempts > 1:
+        raw_error += f" [retry_attempts={retry_attempts}]"
+        if isinstance(retry_operation, str) and retry_operation:
+            raw_error += f" [retry_operation={retry_operation}]"
     return build_failure(
         stage=stage,
         location=location,
         provider_model=provider_model,
-        raw_error=f"{type(exc).__name__}: {exc}",
+        raw_error=raw_error,
         fallback=fallback,
     )
 
@@ -129,13 +138,16 @@ def _run_query_cli(
         cmd.append("--verbose")
     env = dict(os.environ)
     env["MODULE_RAG_SETTINGS_PATH"] = str(settings_path)
-    proc = subprocess.run(
-        cmd,
-        cwd=Path(__file__).resolve().parents[3],
-        env=env,
-        capture_output=True,
-        text=True,
-        check=True,
+    proc, retry_attempts = retry_call(
+        lambda: subprocess.run(
+            cmd,
+            cwd=Path(__file__).resolve().parents[3],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        ),
+        operation="cli_query",
     )
     stdout = proc.stdout
     verbose_payload: dict[str, Any] = {}
@@ -154,6 +166,7 @@ def _run_query_cli(
         "stderr": proc.stderr,
         "trace_id": trace_id,
         "verbose": verbose_payload,
+        "retry_attempts": retry_attempts,
     }
 
 
@@ -176,13 +189,16 @@ def _run_ingest_cli(
         cmd.append("--verbose")
     env = dict(os.environ)
     env["MODULE_RAG_SETTINGS_PATH"] = str(settings_path)
-    proc = subprocess.run(
-        cmd,
-        cwd=Path(__file__).resolve().parents[3],
-        env=env,
-        capture_output=True,
-        text=True,
-        check=True,
+    proc, retry_attempts = retry_call(
+        lambda: subprocess.run(
+            cmd,
+            cwd=Path(__file__).resolve().parents[3],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        ),
+        operation="cli_ingest",
     )
     stdout = proc.stdout
     verbose_payload: dict[str, Any] = {}
@@ -201,6 +217,7 @@ def _run_ingest_cli(
         "stderr": proc.stderr,
         "trace_id": trace_id,
         "verbose": verbose_payload,
+        "retry_attempts": retry_attempts,
     }
 
 
@@ -211,6 +228,7 @@ def _run_eval_cli(
     top_k: int,
     settings_path: Path,
     verbose: bool = False,
+    timeout_s: float = 120.0,
 ) -> dict[str, Any]:
     cmd = [
         "bash",
@@ -223,13 +241,17 @@ def _run_eval_cli(
         cmd.append("--verbose")
     env = dict(os.environ)
     env["MODULE_RAG_SETTINGS_PATH"] = str(settings_path)
-    proc = subprocess.run(
-        cmd,
-        cwd=Path(__file__).resolve().parents[3],
-        env=env,
-        capture_output=True,
-        text=True,
-        check=True,
+    proc, retry_attempts = retry_call(
+        lambda: subprocess.run(
+            cmd,
+            cwd=Path(__file__).resolve().parents[3],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=timeout_s,
+        ),
+        operation="cli_eval",
     )
     stdout = proc.stdout
     verbose_payload: dict[str, Any] = {}
@@ -247,6 +269,7 @@ def _run_eval_cli(
         "stdout": stdout,
         "stderr": proc.stderr,
         "verbose": verbose_payload,
+        "retry_attempts": retry_attempts,
     }
 
 
@@ -261,9 +284,18 @@ def _runtime_bundle(settings_path: Path) -> dict[str, Any]:
     settings = activate_runtime(settings_path)
     return {
         "settings": settings,
-        "ingester": IngestRunner(settings_path=settings_path),
-        "query_runner": QueryRunner(settings_path=settings_path, settings=settings),
-        "eval_runner": EvalRunner(settings_path=settings_path, settings=settings),
+        "ingester": wrap_runner(
+            IngestRunner(settings_path=settings_path),
+            operation="ingester.run",
+        ),
+        "query_runner": wrap_runner(
+            QueryRunner(settings_path=settings_path, settings=settings),
+            operation="query_runner.run",
+        ),
+        "eval_runner": wrap_runner(
+            EvalRunner(settings_path=settings_path, settings=settings),
+            operation="eval_runner.run",
+        ),
         "admin_runner": AdminRunner(settings_path=settings_path),
         "sqlite": SqliteStore(db_path=settings.paths.sqlite_dir / "app.sqlite"),
     }
@@ -2187,6 +2219,8 @@ def main() -> int:
                         "endpoint_key": "qwen",
                         "model": "qwen3.5-plus",
                         "embedding_model": "text-embedding-v3",
+                        "timeout_s": 15,
+                        "max_retries": 0,
                     },
                 },
             },
@@ -2197,6 +2231,7 @@ def main() -> int:
             top_k=3,
             settings_path=ragas_eval_settings,
             verbose=True,
+            timeout_s=60,
         )
         ragas_body = ragas_cli.get("verbose") or {}
         ragas_metrics = ragas_body.get("metrics") or {}
@@ -3748,6 +3783,8 @@ def main() -> int:
                         "embedding_model": "text-embedding-v3",
                         "embedding_base_url": str(qwen_endpoint.get("base_url") or ""),
                         "embedding_api_key": str(qwen_endpoint.get("api_key") or ""),
+                        "timeout_s": 15,
+                        "max_retries": 0,
                     },
                 },
             },
@@ -3764,6 +3801,7 @@ def main() -> int:
             top_k=3,
             settings_path=deepseek_eval_settings,
             verbose=True,
+            timeout_s=90,
         )
         eval_verbose = deepseek_eval_cli.get("verbose") or {}
         eval_metrics = eval_verbose.get("metrics") or {}

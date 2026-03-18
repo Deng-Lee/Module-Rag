@@ -38,8 +38,12 @@ def _render_run_block(payload: dict[str, Any]) -> str:
         "|---|---|---|---|",
     ]
     for case in cases:
+        row = (
+            f"| {case.get('status')} | {case.get('case_id')} | "
+            f"{case.get('title')} | {_render_note(case)} |"
+        )
         lines.append(
-            f"| {case.get('status')} | {case.get('case_id')} | {case.get('title')} | {_render_note(case)} |"
+            row
         )
     compare = payload.get("compare") or {}
     if compare:

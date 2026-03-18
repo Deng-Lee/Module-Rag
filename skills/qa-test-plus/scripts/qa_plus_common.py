@@ -4,11 +4,12 @@ import json
 import math
 import os
 import socket
+import subprocess
 import sys
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 REAL_COMPARE_DEFAULTS = (
     "local.default",
@@ -23,6 +24,9 @@ FIXTURE_DOCS: tuple[tuple[str, str], ...] = (
     ("zh_technical", "chinese_technical_doc.pdf"),
     ("zh_long", "chinese_long_doc.pdf"),
 )
+
+QA_RETRY_ATTEMPTS = 3
+QA_RETRY_BACKOFF_S = 2.0
 
 
 @dataclass
@@ -49,6 +53,25 @@ class CaseResult:
         out = asdict(self)
         out["failure"] = asdict(self.failure)
         return out
+
+
+@dataclass
+class RetryingRunner:
+    wrapped: Any
+    operation: str
+    attempts: int = QA_RETRY_ATTEMPTS
+    backoff_s: float = QA_RETRY_BACKOFF_S
+    last_attempts: int = 1
+
+    def run(self, *args: Any, **kwargs: Any) -> Any:
+        result, used_attempts = retry_call(
+            lambda: self.wrapped.run(*args, **kwargs),
+            operation=self.operation,
+            attempts=self.attempts,
+            backoff_s=self.backoff_s,
+        )
+        self.last_attempts = used_attempts
+        return result
 
 
 def repo_root() -> Path:
@@ -295,6 +318,77 @@ def build_failure(
         provider_model=provider_model,
         raw_error=raw_error,
         fallback=fallback,
+    )
+
+
+def is_retryable_error(exc: Exception) -> bool:
+    if isinstance(exc, (TimeoutError, subprocess.TimeoutExpired)):
+        return True
+
+    text_parts = [f"{type(exc).__name__}: {exc}"]
+    if isinstance(exc, subprocess.CalledProcessError):
+        text_parts.extend(
+            [
+                str(getattr(exc, "stdout", "") or ""),
+                str(getattr(exc, "stderr", "") or ""),
+            ]
+        )
+    text = "\n".join(text_parts).lower()
+
+    if "127.0.0.1:9" in text or "localhost:9" in text:
+        return False
+
+    retry_markers = (
+        "apitimeouterror",
+        "readtimeout",
+        "timed out",
+        "timeout",
+        "connection reset by peer",
+        "_ssl__sslsocket_read",
+        "server disconnected",
+        "remoteprotocolerror",
+        "temporarily unavailable",
+        "temporary failure",
+        "connection aborted",
+    )
+    return any(marker in text for marker in retry_markers)
+
+
+def retry_call(
+    fn: Callable[[], Any],
+    *,
+    operation: str,
+    attempts: int = QA_RETRY_ATTEMPTS,
+    backoff_s: float = QA_RETRY_BACKOFF_S,
+) -> tuple[Any, int]:
+    attempts = max(1, int(attempts))
+    last_exc: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return fn(), attempt
+        except Exception as exc:
+            last_exc = exc
+            setattr(exc, "qa_retry_attempts", attempt)
+            setattr(exc, "qa_retry_operation", operation)
+            if attempt >= attempts or not is_retryable_error(exc):
+                raise
+            time.sleep(float(backoff_s) * attempt)
+    assert last_exc is not None
+    raise last_exc
+
+
+def wrap_runner(
+    runner: Any,
+    *,
+    operation: str,
+    attempts: int = QA_RETRY_ATTEMPTS,
+    backoff_s: float = QA_RETRY_BACKOFF_S,
+) -> RetryingRunner:
+    return RetryingRunner(
+        wrapped=runner,
+        operation=operation,
+        attempts=attempts,
+        backoff_s=backoff_s,
     )
 
 

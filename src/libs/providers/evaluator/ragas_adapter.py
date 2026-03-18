@@ -9,8 +9,8 @@ from ...interfaces.evaluator.evaluator import EvalCaseResult
 
 _MAX_RAGAS_QUERY_CHARS = 240
 _MAX_RAGAS_ANSWER_CHARS = 320
-_MAX_RAGAS_CONTEXTS = 2
-_MAX_RAGAS_CONTEXT_CHARS = 400
+_MAX_RAGAS_CONTEXTS = 1
+_MAX_RAGAS_CONTEXT_CHARS = 240
 
 
 def _safe_float(value: Any) -> float:
@@ -52,6 +52,8 @@ class RagasAdapter:
     embedding_model: str | None = None
     embedding_api_key: str | None = None
     embedding_base_url: str | None = None
+    timeout_s: float = 20.0
+    max_retries: int = 0
     endpoint_key: str | None = None  # accepted for config compatibility (resolved upstream)
 
     def evaluate_case(self, case: Any, run_output: dict[str, Any]) -> EvalCaseResult:
@@ -113,6 +115,8 @@ class RagasAdapter:
                     client_args["api_key"] = self.api_key
                 if isinstance(self.base_url, str) and self.base_url:
                     client_args["base_url"] = self.base_url
+                client_args["timeout"] = float(self.timeout_s)
+                client_args["max_retries"] = int(self.max_retries)
                 # Only create a client when we have at least one connection parameter.
                 if client_args:
                     client = OpenAI(**client_args)
@@ -141,6 +145,8 @@ class RagasAdapter:
                     embedding_client_args["base_url"] = self.embedding_base_url
                 elif isinstance(self.base_url, str) and self.base_url:
                     embedding_client_args["base_url"] = self.base_url
+                embedding_client_args["timeout"] = float(self.timeout_s)
+                embedding_client_args["max_retries"] = int(self.max_retries)
 
                 if embedding_client_args:
                     from openai import OpenAI  # type: ignore
@@ -221,6 +227,8 @@ class RagasAdapter:
                     "answer_chars": len(answer),
                     "context_count": len(contexts),
                     "context_chars": [len(item) for item in contexts],
+                    "timeout_s": float(self.timeout_s),
+                    "max_retries": int(self.max_retries),
                     "hint": (
                         "set OPENAI_API_KEY (or configure evaluator api_key via "
                         "model_endpoints)"
@@ -247,6 +255,8 @@ class RagasAdapter:
                 "answer_chars": len(answer),
                 "context_count": len(contexts),
                 "context_chars": [len(item) for item in contexts],
+                "timeout_s": float(self.timeout_s),
+                "max_retries": int(self.max_retries),
             },
         )
 

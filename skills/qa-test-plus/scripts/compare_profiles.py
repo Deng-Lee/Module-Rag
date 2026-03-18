@@ -20,6 +20,7 @@ from qa_plus_common import (
     now_run_id,
     preflight_real,
     provider_model_label,
+    wrap_runner,
     safe_metric_dict,
     settings_path_for,
     slugify,
@@ -86,9 +87,18 @@ def run_compare(
 
         settings = activate_runtime(settings_path)
         merged_providers = merged_provider_specs(settings, strategy_config_id)
-        ingester = IngestRunner(settings_path=settings_path)
-        query_runner = QueryRunner(settings_path=settings_path, settings=settings)
-        evaluator = EvalRunner(settings_path=settings_path, settings=settings)
+        ingester = wrap_runner(
+            IngestRunner(settings_path=settings_path),
+            operation=f"compare.ingester.run::{strategy_config_id}",
+        )
+        query_runner = wrap_runner(
+            QueryRunner(settings_path=settings_path, settings=settings),
+            operation=f"compare.query_runner.run::{strategy_config_id}",
+        )
+        evaluator = wrap_runner(
+            EvalRunner(settings_path=settings_path, settings=settings),
+            operation=f"compare.eval_runner.run::{strategy_config_id}",
+        )
         embedder_spec = merged_providers.get("embedder") or {}
         llm_spec = merged_providers.get("llm") or {}
 

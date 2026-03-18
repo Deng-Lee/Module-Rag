@@ -21,3 +21,9 @@ def test_deepeval_adapter_missing_dependency() -> None:
     assert result.artifacts.get("error") in {"dependency_missing", "backend_error"}
     if result.artifacts.get("error") == "dependency_missing":
         assert result.artifacts.get("dependency") == "deepeval"
+
+
+def test_ragas_adapter_accepts_timeout_and_retry_config() -> None:
+    adapter = RagasAdapter(timeout_s=12.0, max_retries=0)
+    assert adapter.timeout_s == 12.0
+    assert adapter.max_retries == 0
